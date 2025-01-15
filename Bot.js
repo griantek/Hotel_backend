@@ -16,30 +16,6 @@ const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
 const WHATSAPP_ACCESS_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
 
 // Helper function to send WhatsApp messages
-// async function sendWhatsAppMessage(to, messageData) {
-//     try {
-//         const response = await axios.post(
-//             `${WHATSAPP_API_URL}`,
-//             {
-//                 messaging_product: "whatsapp",
-//                 recipient_type: "individual",
-//                 to: to,
-//                 type: "interactive",
-//                 ...messageData
-//             },
-//             {
-//                 headers: {
-//                     'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-//                     'Content-Type': 'application/json'
-//                 }
-//             }
-//         );
-//         return response.data;
-//     } catch (error) {
-//         console.error('Error sending WhatsApp message:', error);
-//         throw error;
-//     }
-// }
 async function sendWhatsAppMessage(to, messageData) {
     try {
         const response = await axios.post(
@@ -48,7 +24,7 @@ async function sendWhatsAppMessage(to, messageData) {
                 messaging_product: "whatsapp",
                 recipient_type: "individual",
                 to: to,
-                type: messageData.interactive.type, // Dynamically set the type
+                type: "interactive",
                 ...messageData
             },
             {
@@ -58,13 +34,13 @@ async function sendWhatsAppMessage(to, messageData) {
                 }
             }
         );
-        console.log('Message sent successfully:', response.data);
         return response.data;
     } catch (error) {
-        console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+        console.error('Error sending WhatsApp message:', error);
         throw error;
     }
 }
+
 
 // Webhook verification endpoint
 app.get('/spa', (req, res) => {
