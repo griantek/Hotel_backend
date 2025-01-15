@@ -88,7 +88,7 @@ app.post('/spa', async (req, res) => {
     const phoneNumberId = req.body.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
     // Check if the phone_number_id matches the chatbot's ID
-    if (phoneNumberId !== '566098823247995') {
+    if (phoneNumberId !== `${process.env.ID}`) {
         console.log(`Ignoring message sent to phone_number_id: ${phoneNumberId}`);
         return res.sendStatus(200); // Ignore the request
     }
