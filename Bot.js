@@ -232,7 +232,7 @@ async function sendLocation(phone) {
     try {
         const response = await axios({
             method: "POST",
-            url: `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+            url: `${WHATSAPP_API_URL}`,
             headers: {
                 "Authorization": `Bearer ${process.env.WHATSAPP_TOKEN}`,
                 "Content-Type": "application/json",
