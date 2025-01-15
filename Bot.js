@@ -12,8 +12,8 @@ app.use(bodyParser.json());
 const db = new sqlite3.Database('hotel.db');
 
 // WhatsApp API configuration
-const WHATSAPP_API_URL = `https://graph.facebook.com/v21.0/566098823247995/messages`;
-const WHATSAPP_ACCESS_TOKEN = 'EAAPc79akWngBO8ZBmjPvigzXA28sWzni0ZBJ3B4qRyRTPaNfIEJ7kc1u7abRE50bkZAbiSol0xTNlun4YwFxn45tMvmFH1RiqlLxJkqKL7HKZBi6ZCxVQF5IGxQS7bNxUwkSZCgikMtZBlZA33ceClrtyhzAlIOFZBAYBayiWPoP7g4wDLV6KqRcZBBAw3AFGZAMnVG8gZDZD';
+const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
+const WHATSAPP_ACCESS_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
 
 // Helper function to send WhatsApp messages
 // async function sendWhatsAppMessage(to, messageData) {
