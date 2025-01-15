@@ -391,7 +391,7 @@ async function sendBookingDetails(phone, bookings) {
         `Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${booking.check_in_time}\n` +
         `Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${booking.check_out_time}\n` +
         `Room type: ${booking.room_type}\n` +
-        `Price: ${booking.total_price}\n`
+        `Price: $${booking.total_price.toFixed(2)}\n`
     ).join('\n');
 
     await sendWhatsAppMessage(phone, {
