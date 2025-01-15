@@ -234,7 +234,7 @@ async function sendLocation(phone) {
             method: "POST",
             url: `${WHATSAPP_API_URL}`,
             headers: {
-                "Authorization": `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                "Authorization": `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
                 "Content-Type": "application/json",
             },
             data: {
