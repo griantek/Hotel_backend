@@ -40,7 +40,33 @@ async function sendWhatsAppMessage(to, messageData) {
         throw error;
     }
 }
-
+async function sendWhatsAppTextMessage(to, text) {
+    try {
+        const response = await axios.post(
+            `${WHATSAPP_API_URL}`,
+            {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: to,
+                type: "text",
+                text: {
+                    body: text
+                }
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log('Message sent successfully:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+        throw error;
+    }
+}
 
 // Webhook verification endpoint
 app.get('/spa', (req, res) => {
@@ -164,7 +190,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
     switch (buttonId) {
         case 'book_room':
             const bookingLink = generateBookingLink(phone, name);
-            await sendWhatsAppMessage(phone, `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`);
+            await sendWhatsAppTextMessage(phone, `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`);
             // Schedule follow-up if no booking is made
             scheduleBookingFollowUp(phone);
             break;
@@ -177,7 +203,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
         case 'modify_booking':
             const booking = await getUserBookings(user.id);
             const modifyLink = generateModifyLink(booking[0].id);
-            await sendWhatsAppMessage(phone, `Click below to modify your booking. You'll be able to change dates, room type, or add services.: ${modifyLink}`);
+            await sendWhatsAppTextMessage(phone, `Click below to modify your booking. You'll be able to change dates, room type, or add services.: ${modifyLink}`);
             break;
 
         case 'cancel_booking':
