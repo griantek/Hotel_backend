@@ -4,7 +4,7 @@ const axios = require('axios');
 const cron = require('node-cron');
 const moment = require('moment');
 const cors = require('cors');
-
+require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
