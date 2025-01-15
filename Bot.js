@@ -164,7 +164,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
     switch (buttonId) {
         case 'book_room':
             const bookingLink = generateBookingLink(phone, name);
-            await sendBookingLink(phone, bookingLink);
+            await sendWhatsAppMessage(phone, `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`);
             // Schedule follow-up if no booking is made
             scheduleBookingFollowUp(phone);
             break;
@@ -177,7 +177,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
         case 'modify_booking':
             const booking = await getUserBookings(user.id);
             const modifyLink = generateModifyLink(booking[0].id);
-            await sendModifyLink(phone, modifyLink);
+            await sendWhatsAppMessage(phone, `Click below to modify your booking. You'll be able to change dates, room type, or add services.: ${modifyLink}`);
             break;
 
         case 'cancel_booking':
@@ -301,28 +301,7 @@ async function cancelBooking(userId) {
 }
 
 // Message sending functions
-async function sendBookingLink(phone, bookingLink) {
-    await sendWhatsAppMessage(phone, {
-        interactive: {
-            type: "button",
-            body: {
-                text: "Click the button below to make your reservation. Our online booking system will guide you through the process."
-            },
-            action: {
-                buttons: [{
-                    type: "reply",
-                    reply: {
-                        id: "visit_booking",
-                        title: "Book Now"
-                    }
-                }]
-            },
-            footer: {
-                text: bookingLink
-            }
-        }
-    });
-}
+
 
 async function sendBookingDetails(phone, bookings) {
     if (!bookings.length) {
@@ -381,28 +360,7 @@ async function sendBookingDetails(phone, bookings) {
         }
     });
 }
-async function sendModifyLink(phone, modifyLink) {
-    await sendWhatsAppMessage(phone, {
-        interactive: {
-            type: "button",
-            body: {
-                text: "Click below to modify your booking. You'll be able to change dates, room type, or add services."
-            },
-            action: {
-                buttons: [{
-                    type: "reply",
-                    reply: {
-                        id: "visit_modify",
-                        title: "Modify Booking"
-                    }
-                }]
-            },
-            footer: {
-                text: modifyLink
-            }
-        }
-    });
-}
+
 async function sendCancellationConfirmation(phone) {
     await sendWhatsAppMessage(phone, {
         interactive: {
