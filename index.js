@@ -301,7 +301,7 @@ app.post('/api/rooms/availability', async (req, res) => {
         const isAvailable = result.bookingCount < result.totalRooms;
         
         // Calculate number of days for price estimation
-        const numberOfDays = moment(checkOutDate).diff(moment(checkInDate), 'days') + 1;
+        const numberOfDays = moment(checkOutDate).diff(moment(checkInDate), 'days') ;
         const estimatedPrice = result.roomPricePerDay * numberOfDays;
         
         res.json({ 
