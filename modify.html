@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modify or Delete Booking</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .container { max-width: 500px; margin: auto; }
+    label { display: block; margin-top: 10px; }
+    input, select, button { width: 100%; padding: 10px; margin-top: 5px; }
+    button { background-color: #007bff; color: white; border: none; cursor: pointer; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Modify/Delete Booking</h2>
+    <form id="modifyForm">
+      <label for="bookingId">Booking ID:</label>
+      <input type="text" id="bookingId" placeholder="Enter Booking ID" required>
+
+      <label for="roomType">Room Type:</label>
+      <select id="roomType">
+        <option value="">Select Room Type</option>
+        <option value="Single Room">Single Room</option>
+        <option value="Double Room">Double Room</option>
+        <option value="Suite">Suite</option>
+      </select>
+
+      <label for="checkIn">Check-In Date:</label>
+      <input type="date" id="checkIn">
+
+      <label for="checkOut">Check-Out Date:</label>
+      <input type="date" id="checkOut">
+
+      <label for="guestCount">Number of Guests:</label>
+      <input type="number" id="guestCount">
+
+      <button type="submit">Modify Booking</button>
+      <button type="button" id="deleteButton">Delete Booking</button>
+    </form>
+  </div>
+
+  <script>
+    const modifyForm = document.getElementById('modifyForm');
+    const deleteButton = document.getElementById('deleteButton');
+
+    // Modify booking
+    modifyForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const bookingId = document.getElementById('bookingId').value;
+
+      const response = await fetch(`http://localhost:3000/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomType: document.getElementById('roomType').value,
+          checkInDate: document.getElementById('checkIn').value,
+          checkOutDate: document.getElementById('checkOut').value,
+          guestCount: document.getElementById('guestCount').value,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Booking Modified Successfully!');
+      } else {
+        alert('Modification Failed!');
+      }
+    });
+
+    // Delete booking
+    deleteButton.addEventListener('click', async () => {
+      const bookingId = document.getElementById('bookingId').value;
+      if (confirm('Are you sure you want to delete this booking?')) {
+        const response = await fetch(`http://localhost:3000/api/bookings/${bookingId}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          alert('Booking Deleted Successfully!');
+          modifyForm.reset();
+        } else {
+          alert('Deletion Failed!');
+        }
+      }
+    });
+  </script>
+</body>
+</html>

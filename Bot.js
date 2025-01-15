@@ -1,0 +1,547 @@
+// Required dependencies
+const express = require('express');
+const bodyParser = require('body-parser');
+const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
+const schedule = require('node-schedule');
+require('dotenv').config();
+const app = express();
+app.use(bodyParser.json());
+
+// Database connection
+const db = new sqlite3.Database('hotel.db');
+
+// WhatsApp API configuration
+const WHATSAPP_API_URL = `https://graph.facebook.com/v21.0/566098823247995/messages`;
+const WHATSAPP_ACCESS_TOKEN = 'EAAPc79akWngBO8ZBmjPvigzXA28sWzni0ZBJ3B4qRyRTPaNfIEJ7kc1u7abRE50bkZAbiSol0xTNlun4YwFxn45tMvmFH1RiqlLxJkqKL7HKZBi6ZCxVQF5IGxQS7bNxUwkSZCgikMtZBlZA33ceClrtyhzAlIOFZBAYBayiWPoP7g4wDLV6KqRcZBBAw3AFGZAMnVG8gZDZD';
+
+// Helper function to send WhatsApp messages
+// async function sendWhatsAppMessage(to, messageData) {
+//     try {
+//         const response = await axios.post(
+//             `${WHATSAPP_API_URL}`,
+//             {
+//                 messaging_product: "whatsapp",
+//                 recipient_type: "individual",
+//                 to: to,
+//                 type: "interactive",
+//                 ...messageData
+//             },
+//             {
+//                 headers: {
+//                     'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+//                     'Content-Type': 'application/json'
+//                 }
+//             }
+//         );
+//         return response.data;
+//     } catch (error) {
+//         console.error('Error sending WhatsApp message:', error);
+//         throw error;
+//     }
+// }
+async function sendWhatsAppMessage(to, messageData) {
+    try {
+        const response = await axios.post(
+            `${WHATSAPP_API_URL}`, // Ensure PHONE_NUMBER_ID is included in the URL
+            {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: to,
+                type: messageData.type || "interactive", // Ensure the type is dynamic
+                interactive: messageData.interactive // Pass the interactive object for buttons
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+        throw error;
+    }
+}
+
+// Webhook verification endpoint
+app.get('/spa', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode && token) {
+        if (mode === 'subscribe' && token === 'eeee') {
+            console.log('Webhook verified');
+            res.status(200).send(challenge);
+        } else {
+            res.sendStatus(403);
+        }
+    }
+});
+
+// Webhook for incoming messages
+app.post('/spa', async (req, res) => {
+    const { body } = req;
+    // Extract the phone_number_id from the payload
+    const phoneNumberId = req.body.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+
+    // Check if the phone_number_id matches the chatbot's ID
+    if (phoneNumberId !== '566098823247995') {
+        console.log(`Ignoring message sent to phone_number_id: ${phoneNumberId}`);
+        return res.sendStatus(200); // Ignore the request
+    }
+    
+    if (body.object) {
+        if (body.entry && 
+            body.entry[0].changes && 
+            body.entry[0].changes[0].value.messages && 
+            body.entry[0].changes[0].value.messages[0]) {
+
+            const incomingMessage = req.body.entry[0].changes[0].value.messages[0];
+            const senderId = incomingMessage.from; // WhatsApp ID (includes phone number)
+            const phone = senderId.replace('whatsapp:', ''); // Extract phone number
+            const name = req.body.entry[0].changes[0].value.contacts?.[0]?.profile?.name || "Dear"; // Fetch user name
+            const message = body.entry[0].changes[0].value.messages[0];
+            
+            await handleIncomingMessage(phone, message, name);
+        }
+        res.status(200).send('EVENT_RECEIVED');
+    } else {
+        res.sendStatus(404);
+    }
+});
+
+// Handle incoming messages
+async function handleIncomingMessage(phone, message, name) {
+    try {
+        // Check if user exists and has bookings
+        const user = await getUserByPhone(phone);
+        const hasBookings = user ? await checkUserBookings(user.id) : false;
+        userName = user?.name || name;
+
+        if (message.type === 'text' && message.text.body.toLowerCase() === 'hi') {
+            // Initial greeting with buttons
+            await sendInitialGreeting(phone, userName , hasBookings);
+        } else if (message.type === 'interactive') {
+            await handleButtonResponse(phone, userName, message.interactive, user);
+        }
+    } catch (error) {
+        console.error('Error handling message:', error);
+    }
+}
+
+// Send initial greeting with appropriate buttons
+async function sendInitialGreeting(phone, name, hasBookings) {
+    const greeting = name ? `Hello ${name}!` : 'Hello!';
+    const buttons = hasBookings ? [
+        {
+            "type": "reply",
+            "reply": {
+                "id": "view_bookings",
+                "title": "View Your Bookings"
+            }
+        },
+        {
+            "type": "reply",
+            "reply": {
+                "id": "contact_us",
+                "title": "Contact Us"
+            }
+        }
+    ] : [
+        {
+            "type": "reply",
+            "reply": {
+                "id": "book_room",
+                "title": "Book a Room"
+            }
+        },
+        {
+            "type": "reply",
+            "reply": {
+                "id": "contact_us",
+                "title": "Contact Us"
+            }
+        }
+    ];
+
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: `${greeting} Welcome to Our Hotel. How can I assist you today?`
+            },
+            action: {
+                buttons: buttons
+            }
+        }
+    });
+}
+
+// Handle button responses
+async function handleButtonResponse(phone, name, interactive, user) {
+    const buttonId = interactive.button_reply.id;
+
+    switch (buttonId) {
+        case 'book_room':
+            const bookingLink = generateBookingLink(phone, name);
+            await sendBookingLink(phone, bookingLink);
+            // Schedule follow-up if no booking is made
+            scheduleBookingFollowUp(phone);
+            break;
+
+        case 'view_bookings':
+            const bookings = await getUserBookings(user.id);
+            await sendBookingDetails(phone, bookings);
+            break;
+
+        case 'modify_booking':
+            const booking = await getUserBookings(user.id);
+            const modifyLink = generateModifyLink(booking[0].id);
+            await sendModifyLink(phone, modifyLink);
+            break;
+
+        case 'cancel_booking':
+            await sendCancellationConfirmation(phone);
+            break;
+
+        case 'confirm_cancel':
+            await cancelBooking(user.id);
+            await sendCancellationSuccess(phone);
+            break;
+
+        case 'contact_us':
+            await sendContactInfo(phone);
+            break;
+    }
+}
+
+// Generate booking/modify links
+function generateBookingLink(phone, name) {
+    const params = new URLSearchParams({
+        phone: phone,
+        name: name || ''
+    });
+    return `${process.env.WEB_APP_URL}/booking?${params.toString()}`;
+}
+
+function generateModifyLink(id) {
+    const params = new URLSearchParams({
+        id: id
+    });
+    return `${process.env.WEB_APP_URL}/modify?${params.toString()}`;
+}
+
+// Schedule reminders and follow-ups
+function scheduleBookingFollowUp(phone) {
+    // Schedule follow-up after 1 hour if no booking is made
+    schedule.scheduleJob(new Date(Date.now() + 5 * 60 * 1000), async () => {
+        const hasBooked = await checkRecentBooking(phone);
+        if (!hasBooked) {
+            await sendFollowUpMessage(phone);
+        }
+    });
+}
+
+function scheduleCheckInReminder(booking) {
+    // Schedule check-in reminder 24 hours before
+    const reminderTime = new Date(booking.check_in_date);
+    reminderTime.setHours(reminderTime.getHours() - 24);
+    
+    schedule.scheduleJob(reminderTime, async () => {
+        await sendCheckInReminder(booking.phone, booking);
+    });
+}
+
+// Database helper functions
+async function getUserByPhone(phone) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM users WHERE phone = ?', [phone], (err, row) => {
+            if (err) reject(err);
+            resolve(row);
+        });
+    });
+}
+
+async function checkUserBookings(userId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            'SELECT COUNT(*) as count FROM bookings WHERE user_id = ? AND status = "confirmed"',
+            [userId],
+            (err, row) => {
+                if (err) reject(err);
+                resolve(row.count > 0);
+            }
+        );
+    });
+}
+async function getUserBookings(userId) {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT * FROM bookings 
+             WHERE user_id = ? AND status != 'cancelled' 
+             ORDER BY check_in_date DESC`,
+            [userId],
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+async function checkRecentBooking(phone) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT COUNT(*) as count 
+             FROM bookings b
+             JOIN users u ON b.user_id = u.id
+             WHERE u.phone = ? 
+             AND b.created_at >= datetime('now', '-1 hour')`,
+            [phone],
+            (err, row) => {
+                if (err) reject(err);
+                resolve(row.count > 0);
+            }
+        );
+    });
+}
+
+async function cancelBooking(userId) {
+    return new Promise((resolve, reject) => {
+        db.run(
+            `UPDATE bookings 
+             SET status = 'cancelled'
+             WHERE user_id = ? `,
+            [userId],
+            (err) => {
+                if (err) reject(err);
+                resolve();
+            }
+        );
+    });
+}
+
+// Message sending functions
+// async function sendBookingLink(phone, bookingLink) {
+//     await sendWhatsAppMessage(phone, {
+//         interactive: {
+//             type: "button",
+//             body: {
+//                 text: "Click the button below to make your reservation. Our online booking system will guide you through the process."
+//             },
+//             action: {
+//                 buttons: [{
+//                     type: "reply",
+//                     reply: {
+//                         id: "visit_booking",
+//                         title: "Book Now"
+//                     }
+//                 }]
+//             },
+//             footer: {
+//                 text: bookingLink
+//             }
+//         }
+//     });
+// }
+async function sendBookingLink(phone, bookingLink) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "Click the button below to make your reservation. Our online booking system will guide you through the process."
+            },
+            action: {
+                buttons: [{
+                    type: "url", // Use a URL button type
+                    url: bookingLink, // Provide the booking link
+                    title: "Book Now" // The button text
+                }]
+            }
+        }
+    });
+}
+async function sendBookingDetails(phone, bookings) {
+    if (!bookings.length) {
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "button",
+                body: {
+                    text: "You don't have any active bookings. Would you like to make a reservation?"
+                },
+                action: {
+                    buttons: [{
+                        type: "reply",
+                        reply: {
+                            id: "book_room",
+                            title: "Book Now"
+                        }
+                    }]
+                }
+            }
+        });
+        return;
+    }
+
+    const bookingsList = bookings.map(booking => 
+        `Booking ID: ${booking.id}\n` +
+        `Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${booking.check_in_time}\n` +
+        `Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${booking.check_out_time}\n` +
+        `Room type: ${booking.room_type}\n` +
+        `Status: ${booking.status}\n`
+    ).join('\n');
+
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: `Here are your bookings:\n\n${bookingsList}`
+            },
+            action: {
+                buttons: [
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "modify_booking",
+                            title: "Modify Booking"
+                        }
+                    },
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "cancel_booking",
+                            title: "Cancel Booking"
+                        }
+                    }
+                ]
+            }
+        }
+    });
+}
+async function sendModifyLink(phone, modifyLink) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "Click below to modify your booking. You'll be able to change dates, room type, or add services."
+            },
+            action: {
+                buttons: [{
+                    type: "reply",
+                    reply: {
+                        id: "visit_modify",
+                        title: "Modify Booking"
+                    }
+                }]
+            },
+            footer: {
+                text: modifyLink
+            }
+        }
+    });
+}
+async function sendCancellationConfirmation(phone) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "Are you sure you want to cancel your booking? This action cannot be undone."
+            },
+            action: {
+                buttons: [
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "confirm_cancel",
+                            title: "Yes, Cancel"
+                        }
+                    },
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "keep_booking",
+                            title: "No, Keep Booking"
+                        }
+                    }
+                ]
+            }
+        }
+    });
+}
+async function sendCancellationSuccess(phone) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "Your booking has been successfully cancelled. Would you like to make a new reservation?"
+            },
+            action: {
+                buttons: [{
+                    type: "reply",
+                    reply: {
+                        id: "book_room",
+                        title: "Book New Room"
+                    }
+                }]
+            }
+        }
+    });
+}
+async function sendContactInfo(phone) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "You can reach us through:\n\n" +
+                      "📞 Phone: +1-234-567-8900\n" +
+                      "📧 Email: contact@ourhotel.com\n" +
+                      "📍 Address: 123 Hotel Street, City, Country\n\n" +
+                      "Our front desk is available 24/7."
+            },
+            action: {
+                buttons: [{
+                    type: "reply",
+                    reply: {
+                        id: "book_room",
+                        title: "Book a Room"
+                    }
+                }]
+            }
+        }
+    });
+}
+async function sendFollowUpMessage(phone) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: "We noticed you haven't completed your booking. Do you need any assistance or have questions about our rooms?"
+            },
+            action: {
+                buttons: [
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "book_room",
+                            title: "Continue Booking"
+                        }
+                    },
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "contact_us",
+                            title: "Need Help"
+                        }
+                    }
+                ]
+            }
+        }
+    });
+}
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
