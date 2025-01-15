@@ -218,6 +218,41 @@ async function handleButtonResponse(phone, name, interactive, user) {
         case 'contact_us':
             await sendContactInfo(phone);
             break;
+        case 'location':
+            await sendLocation(phone);
+            break;
+        default:
+            await sendWhatsAppTextMessage(phone, 'I apologize, but I didn\'t understand that. Please try again.');
+            break;
+    }
+}
+
+// Send location
+async function sendLocation(phone) {
+    try {
+        const response = await axios({
+            method: "POST",
+            url: `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+            headers: {
+                "Authorization": `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            data: {
+                messaging_product: "whatsapp",
+                to: phone,
+                type: "location",
+                location: {
+                    latitude: "10.0889", // Replace with actual hotel latitude
+                    longitude: "76.3639", // Replace with actual hotel longitude
+                    name: "Hotel Name", // Replace with actual hotel name
+                    address: "Hotel Address, City, State" // Replace with actual hotel address
+                }
+            }
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Error sending location:", error);
+        throw new Error("Failed to send location");
     }
 }
 
@@ -449,8 +484,8 @@ async function sendContactInfo(phone) {
                 buttons: [{
                     type: "reply",
                     reply: {
-                        id: "book_room",
-                        title: "Book a Room"
+                        id: "location",
+                        title: "View Location"
                     }
                 }]
             }
