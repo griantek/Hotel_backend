@@ -16,40 +16,16 @@ const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
 const WHATSAPP_ACCESS_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
 
 // Helper function to send WhatsApp messages
-// async function sendWhatsAppMessage(to, messageData) {
-//     try {
-//         const response = await axios.post(
-//             `${WHATSAPP_API_URL}`,
-//             {
-//                 messaging_product: "whatsapp",
-//                 recipient_type: "individual",
-//                 to: to,
-//                 type: "interactive",
-//                 ...messageData
-//             },
-//             {
-//                 headers: {
-//                     'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-//                     'Content-Type': 'application/json'
-//                 }
-//             }
-//         );
-//         return response.data;
-//     } catch (error) {
-//         console.error('Error sending WhatsApp message:', error);
-//         throw error;
-//     }
-// }
 async function sendWhatsAppMessage(to, messageData) {
     try {
         const response = await axios.post(
-            `${WHATSAPP_API_URL}`, // Ensure PHONE_NUMBER_ID is included in the URL
+            `${WHATSAPP_API_URL}`,
             {
                 messaging_product: "whatsapp",
                 recipient_type: "individual",
                 to: to,
-                type: messageData.type || "interactive", // Ensure the type is dynamic
-                interactive: messageData.interactive // Pass the interactive object for buttons
+                type: "interactive",
+                ...messageData
             },
             {
                 headers: {
@@ -60,10 +36,11 @@ async function sendWhatsAppMessage(to, messageData) {
         );
         return response.data;
     } catch (error) {
-        console.error('Error sending WhatsApp message:', error.response?.data || error.message);
+        console.error('Error sending WhatsApp message:', error);
         throw error;
     }
 }
+
 
 // Webhook verification endpoint
 app.get('/spa', (req, res) => {
@@ -324,28 +301,6 @@ async function cancelBooking(userId) {
 }
 
 // Message sending functions
-// async function sendBookingLink(phone, bookingLink) {
-//     await sendWhatsAppMessage(phone, {
-//         interactive: {
-//             type: "button",
-//             body: {
-//                 text: "Click the button below to make your reservation. Our online booking system will guide you through the process."
-//             },
-//             action: {
-//                 buttons: [{
-//                     type: "reply",
-//                     reply: {
-//                         id: "visit_booking",
-//                         title: "Book Now"
-//                     }
-//                 }]
-//             },
-//             footer: {
-//                 text: bookingLink
-//             }
-//         }
-//     });
-// }
 async function sendBookingLink(phone, bookingLink) {
     await sendWhatsAppMessage(phone, {
         interactive: {
@@ -355,14 +310,20 @@ async function sendBookingLink(phone, bookingLink) {
             },
             action: {
                 buttons: [{
-                    type: "url", // Use a URL button type
-                    url: bookingLink, // Provide the booking link
-                    title: "Book Now" // The button text
+                    type: "reply",
+                    reply: {
+                        id: "visit_booking",
+                        title: "Book Now"
+                    }
                 }]
+            },
+            footer: {
+                text: bookingLink
             }
         }
     });
 }
+
 async function sendBookingDetails(phone, bookings) {
     if (!bookings.length) {
         await sendWhatsAppMessage(phone, {
