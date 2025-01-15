@@ -11,8 +11,8 @@ app.use(cors());
 
 const db = new sqlite3.Database('hotel.db');
 
-const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
-const WHATSAPP_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
+const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
 async function sendWhatsAppMessage(phoneNumber, message) {
   try {
