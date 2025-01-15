@@ -83,7 +83,7 @@ app.post('/api/bookings', async (req, res) => {
       // Calculate number of days based on dates only, ignoring time
       const checkIn = moment(checkInDate);
       const checkOut = moment(checkOutDate);
-      const numberOfDays = checkOut.diff(checkIn, 'days') + 1; // Including both check-in and check-out days
+      const numberOfDays = checkOut.diff(checkIn, 'days') ; // Including both check-in and check-out days
 
       // Get room price per day
       db.get('SELECT price FROM rooms WHERE type = ?', [roomType], (err, room) => {
@@ -125,7 +125,7 @@ app.post('/api/bookings', async (req, res) => {
                   return res.status(500).json({ error: err.message });
                 }
 
-                const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} ${checkInTime}\nCheck-out: ${checkOutDate} ${checkOutTime}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
+                const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} at ${checkInTime}\nCheck-out: ${checkOutDate} at ${checkOutTime}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
                 await sendWhatsAppMessage(phone, confirmationMessage);
 
                 res.json({
@@ -180,7 +180,7 @@ app.patch('/api/bookings/:id', async (req, res) => {
           // Calculate number of days based on dates only
           const checkInDay = moment(checkInDate || booking.check_in_date);
           const checkOutDay = moment(checkOutDate || booking.check_out_date);
-          const numberOfDays = checkOutDay.diff(checkInDay, 'days') + 1; // Including both check-in and check-out days
+          const numberOfDays = checkOutDay.diff(checkInDay, 'days') ; // Including both check-in and check-out days
 
           const totalPrice = numberOfDays * booking.roomPricePerDay;
 
