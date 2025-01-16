@@ -283,15 +283,7 @@ function scheduleBookingFollowUp(phone) {
     });
 }
 
-function scheduleCheckInReminder(booking) {
-    // Schedule check-in reminder 24 hours before
-    const reminderTime = new Date(booking.check_in_date);
-    reminderTime.setHours(reminderTime.getHours() - 24);
-    
-    schedule.scheduleJob(reminderTime, async () => {
-        await sendCheckInReminder(booking.phone, booking);
-    });
-}
+
 
 // Database helper functions
 async function getUserByPhone(phone) {
@@ -346,19 +338,25 @@ async function checkRecentBooking(phone) {
     });
 }
 
+const axios = require('axios');
+
 async function cancelBooking(userId) {
-    return new Promise((resolve, reject) => {
-        db.run(
-            `UPDATE bookings 
-             SET status = 'cancelled'
-             WHERE user_id = ? `,
-            [userId],
-            (err) => {
-                if (err) reject(err);
-                resolve();
-            }
-        );
-    });
+    // Get the user's bookings
+    const bookings = await getUserBookings(userId);
+
+    if (!bookings || bookings.length === 0) {
+        throw new Error('No active bookings found for the user.');
+    }
+
+    // Use the first booking's ID to call the DELETE API
+    try {
+        const bookingId = bookings[0].id; // Assuming `getUserBookings` returns a list of bookings
+        const response = await axios.delete(`${process.env.BACKEND_URL}/api/bookings/${bookingId}`);
+        return response.data; // Return API response
+    } catch (error) {
+        console.error('Error canceling booking via API:', error.message);
+        throw error;
+    }
 }
 
 // Message sending functions
