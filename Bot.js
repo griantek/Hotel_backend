@@ -338,7 +338,7 @@ async function checkRecentBooking(phone) {
     });
 }
 
-const axios = require('axios');
+
 
 async function cancelBooking(userId) {
     // Get the user's bookings
