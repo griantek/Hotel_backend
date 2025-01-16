@@ -64,6 +64,14 @@ db.serialize(() => {
     price REAL NOT NULL,
     availability INTEGER NOT NULL
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    reminder_time TEXT NOT NULL,
+    reminder_type TEXT NOT NULL, -- '24hr' or '1hr'
+    FOREIGN KEY (booking_id) REFERENCES bookings (id)
+  )`);
 });
 
 // Updated create booking endpoint with date-based pricing
@@ -126,6 +134,10 @@ app.post('/api/bookings', async (req, res) => {
                 if (err) {
                   return res.status(500).json({ error: err.message });
                 }
+
+                const bookingId = this.lastID;
+                // Create reminders
+                createReminders(bookingId, checkInDate, checkInTime);
 
                 const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} at ${checkInTime}\nCheck-out: ${checkOutDate} at ${checkOutTime}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
                 await sendWhatsAppMessage(phone, confirmationMessage);
@@ -212,12 +224,11 @@ app.patch('/api/bookings/:id', async (req, res) => {
               if (err) {
                 return res.status(500).json({ error: err.message });
               }
+              // Delete old reminders
+              db.run(`DELETE FROM reminders WHERE booking_id = ?`, [bookingId]);
 
-              // Cancel previous reminders
-              if (scheduledJobs[bookingId]) {
-                scheduledJobs[bookingId].forEach(job => job.cancel());
-                delete scheduledJobs[bookingId];
-              }
+              // Create new reminders
+              createReminders(bookingId, checkInDate, checkInTime);
 
               const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${checkInTime || booking.check_in_time}\nCheck-out: ${checkOutDate || booking.check_out_date} ${checkOutTime || booking.check_out_time}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
               
@@ -293,12 +304,8 @@ app.delete('/api/bookings/:id', (req, res) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-
-    // Cancel scheduled jobs
-    if (scheduledJobs[bookingId]) {
-      scheduledJobs[bookingId].forEach(job => job.cancel());
-      delete scheduledJobs[bookingId];
-    }
+    // Delete reminders
+    db.run(`DELETE FROM reminders WHERE booking_id = ?`, [bookingId]);
 
     res.json({ message: 'Booking canceled successfully' });
   });
@@ -338,6 +345,41 @@ app.get('/api/bookings/:id', (req, res) => {
   );
 });
 
+//create reminder
+function createReminders(bookingId, checkInDate, checkInTime) {
+  const checkInDateTime = moment(`${checkInDate}T${checkInTime}`);
+  
+  // Calculate reminder times
+  const reminder24hr = checkInDateTime.clone().subtract(24, 'hours').format('YYYY-MM-DD HH:mm:ss');
+  const reminder1hr = checkInDateTime.clone().subtract(1, 'hours').format('YYYY-MM-DD HH:mm:ss');
+
+  db.run(`INSERT INTO reminders (booking_id, reminder_time, reminder_type) VALUES (?, ?, ?)`, 
+    [bookingId, reminder24hr, '24hr']);
+  db.run(`INSERT INTO reminders (booking_id, reminder_time, reminder_type) VALUES (?, ?, ?)`, 
+    [bookingId, reminder1hr, '1hr']);
+}
+//send  reminder
+cron.schedule('* * * * *', () => {
+  const now = moment().format('YYYY-MM-DD HH:mm:ss');
+
+  db.all(`SELECT reminders.*, bookings.room_type, bookings.check_in_date, bookings.check_in_time, users.phone 
+          FROM reminders 
+          JOIN bookings ON reminders.booking_id = bookings.id 
+          JOIN users ON bookings.user_id = users.id 
+          WHERE reminder_time <= ?`, [now], async (err, rows) => {
+    if (err) {
+      return console.error('Error fetching reminders:', err.message);
+    }
+
+    rows.forEach(async (reminder) => {
+      const message = `Dear Customer, this is a friendly reminder that your booking for a ${reminder.room_type} on ${reminder.check_in_date} at ${reminder.check_in_time}. We look forward to welcoming you!`;
+      await sendWhatsAppMessage(reminder.phone, message);
+
+      // Delete reminder after sending
+      db.run(`DELETE FROM reminders WHERE id = ?`, [reminder.id]);
+    });
+  });
+});
 
 const PORT =  4000;
 app.listen(PORT, () => {
