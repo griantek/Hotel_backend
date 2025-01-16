@@ -276,7 +276,8 @@ function generateModifyLink(id) {
 function scheduleBookingFollowUp(phone) {
     // Schedule follow-up after 1 hour if no booking is made
     schedule.scheduleJob(new Date(Date.now() + 5 * 60 * 1000), async () => {
-        const hasBooked = await checkRecentBooking(phone);
+        const user = await getUserByPhone(phone);
+        const hasBooked = user ? await checkUserBookings(user.id) : false;
         if (!hasBooked) {
             await sendFollowUpMessage(phone);
         }
