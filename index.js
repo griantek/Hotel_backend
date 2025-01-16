@@ -9,6 +9,8 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 
 const db = new sqlite3.Database('hotel.db');
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
@@ -78,7 +80,165 @@ db.serialize(() => {
     reminder_type TEXT NOT NULL, -- '24hr' or '1hr'
     FOREIGN KEY (booking_id) REFERENCES bookings (id)
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL -- Store hashed passwords
+  )`); 
 });
+
+//Admin
+app.post('/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  db.get('SELECT * FROM admins WHERE username = ?', [username], async (err, admin) => {
+      if (err || !admin) return res.status(401).json({ error: 'Invalid username or password' });
+
+      const isValidPassword = await bcrypt.compare(password, admin.password);
+      if (!isValidPassword) return res.status(401).json({ error: 'Invalid username or password' });
+
+      const token = jwt.sign({ id: admin.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      res.json({ token });
+  });
+});
+// View users
+app.get('/admin/users', authenticateAdmin, (req, res) => {
+  db.all('SELECT * FROM users', (err, users) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(users);
+  });
+});
+
+// View bookings
+app.get('/admin/bookings', authenticateAdmin, (req, res) => {
+  db.all('SELECT * FROM bookings', (err, bookings) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(bookings);
+  });
+});
+//Manage rooms
+// Fetch all rooms
+app.get('/admin/rooms', authenticateAdmin, (req, res) => {
+  db.all('SELECT * FROM rooms', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to fetch rooms' });
+    }
+    res.json(rows);
+  });
+});
+// Add a new room
+app.post('/admin/rooms', authenticateAdmin, (req, res) => {
+  const { type, price, availability } = req.body;
+
+  if (!type || price === undefined || availability === undefined) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  db.run(
+    `INSERT INTO rooms (type, price, availability) VALUES (?, ?, ?)`,
+    [type, price, availability],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to add room type' });
+      }
+      res.status(201).json({ message: 'Room type added successfully', id: this.lastID });
+    }
+  );
+});
+// Update a room type
+app.patch('/admin/rooms/:id', authenticateAdmin, (req, res) => {
+  const { id } = req.params;
+  const { type, price, availability } = req.body;
+
+  if (type === undefined && price === undefined && availability === undefined) {
+    return res.status(400).json({ error: 'At least one field is required for update' });
+  }
+
+  const fieldsToUpdate = [];
+  const values = [];
+
+  if (type !== undefined) {
+    fieldsToUpdate.push('type = ?');
+    values.push(type);
+  }
+  if (price !== undefined) {
+    fieldsToUpdate.push('price = ?');
+    values.push(price);
+  }
+  if (availability !== undefined) {
+    fieldsToUpdate.push('availability = ?');
+    values.push(availability);
+  }
+  values.push(id);
+
+  const query = `UPDATE rooms SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+
+  db.run(query, values, function (err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to update room type' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Room type not found' });
+    }
+    res.json({ message: 'Room type updated successfully' });
+  });
+});
+
+// Delete a room type
+app.delete('/admin/rooms/:id', authenticateAdmin, (req, res) => {
+  const { id } = req.params;
+
+  db.run(`DELETE FROM rooms WHERE id = ?`, [id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to delete room type' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Room type not found' });
+    }
+    res.json({ message: 'Room type deleted successfully' });
+  });
+});
+
+// Send notification
+app.post('/admin/notify', authenticateAdmin, async (req, res) => {
+  const { phone, message } = req.body;
+  try {
+      await sendWhatsAppMessage(phone, message);
+      res.json({ message: 'Notification sent successfully' });
+  } catch (error) {
+      res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
+// View statics
+app.get('/admin/stats', authenticateAdmin, (req, res) => {
+  db.get(
+    `SELECT 
+     COUNT(*) as totalBookings,
+     IFNULL(SUM(total_price), 0) as totalRevenue
+     FROM bookings WHERE status = 'confirmed'`,
+    (err, stats) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({
+        totalBookings: stats.totalBookings,
+        totalRevenue: stats.totalRevenue,
+        occupancyRate: 0, // Placeholder if occupancyRate calculation is missing
+        roomStats: {},   // Placeholder if roomStats are not fetched
+        recentBookings: [] // Placeholder if recentBookings are not fetched
+      });
+    }
+  );
+});
+// Middleware to authenticate admin
+function authenticateAdmin(req, res, next) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) return res.status(403).json({ error: 'Forbidden' });
+      req.adminId = decoded.id;
+      next();
+  });
+}
 
 // create booking endpoint with date-based pricing
 app.post('/api/bookings', async (req, res) => {
