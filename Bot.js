@@ -196,7 +196,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
 
     switch (buttonId) {
         case 'book_room':
-            const bookingLink = generateBookingLink(phone, name);
+            const bookingLink = await generateBookingLink(phone, name);
             await sendWhatsAppTextMessage(phone, `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`);
             // Schedule follow-up if no booking is made
             scheduleBookingFollowUp(phone);
@@ -209,7 +209,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
 
         case 'modify_booking':
             const booking = await getUserBookings(user.id);
-            const modifyLink = generateModifyLink(booking[0].id);
+            const modifyLink = await generateModifyLink(booking[0].id);
             await sendWhatsAppTextMessage(phone, `Click below to modify your booking. You'll be able to change dates, room type, or add services.: ${modifyLink}`);
             break;
 
