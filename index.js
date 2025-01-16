@@ -219,16 +219,6 @@ app.patch('/api/bookings/:id', async (req, res) => {
                 delete scheduledJobs[bookingId];
               }
 
-              // Schedule new reminders
-              const updatedBooking = {
-                id: bookingId,
-                room_type: roomType || booking.room_type,
-                check_in_date: checkInDate || booking.check_in_date,
-                check_in_time: checkInTime || booking.check_in_time,
-                phone: booking.phone,
-              };
-              scheduleCheckInReminder(updatedBooking);
-
               const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${checkInTime || booking.check_in_time}\nCheck-out: ${checkOutDate || booking.check_out_date} ${checkOutTime || booking.check_out_time}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
               
               await sendWhatsAppMessage(booking.phone, modificationMessage);
