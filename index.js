@@ -374,7 +374,7 @@ cron.schedule('* * * * *', () => {
     rows.forEach(async (reminder) => {
       const message = `Dear Customer, this is a friendly reminder that your booking for a ${reminder.room_type} on ${reminder.check_in_date} at ${reminder.check_in_time}. We look forward to welcoming you!`;
       await sendWhatsAppMessage(reminder.phone, message);
-
+      console.log('Reminder sent:', message);
       // Delete reminder after sending
       db.run(`DELETE FROM reminders WHERE id = ?`, [reminder.id]);
     });
