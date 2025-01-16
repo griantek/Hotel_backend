@@ -361,7 +361,7 @@ function createReminders(bookingId, checkInDate, checkInTime) {
 //send  reminder
 cron.schedule('* * * * *', () => {
   const now = moment().format('YYYY-MM-DD HH:mm:ss');
-
+  console.log('Checking for reminders:', now);
   db.all(`SELECT reminders.*, bookings.room_type, bookings.check_in_date, bookings.check_in_time, users.phone 
           FROM reminders 
           JOIN bookings ON reminders.booking_id = bookings.id 
