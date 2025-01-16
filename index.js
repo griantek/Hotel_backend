@@ -398,9 +398,11 @@ app.get('/api/bookings/:id', (req, res) => {
 
 function scheduleCheckInReminder(booking) {
   const checkInDateTime = new Date(`${booking.check_in_date}T${booking.check_in_time}`);
-
+  checkInDateTime.setHours(checkInDateTime.getHours() + 5);   // Add 5 hours
+  checkInDateTime.setMinutes(checkInDateTime.getMinutes() + 30); // Add 30 minutes  
   // Schedule 24-hour reminder
   const reminderTime24Hours = new Date(checkInDateTime);
+  
   reminderTime24Hours.setHours(reminderTime24Hours.getHours() - 24);
   const job24 = schedule.scheduleJob(reminderTime24Hours, async () => {
     await sendCheckInReminder(booking.phone, booking);
