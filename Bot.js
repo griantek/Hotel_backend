@@ -264,30 +264,40 @@ async function sendLocation(phone) {
 }
 
 // Generate booking/modify links
-function generateBookingLink(phone, name) {
-    // Call the generate-token endpoint
-    const response = axios.get(`${process.env.BACKEND_URL}/generate-token`, {
-        params: {
-            phone: phone,
-            name: name
-        }
-    });
-    // Extract the token from the response
-    const token = response.data.token;
-    return `${process.env.WEB_APP_URL}/booking?token=${token}`;
+async function generateBookingLink(phone, name) {
+    try {
+        // Call the generate-token endpoint
+        const response = await axios.get(`${process.env.BACKEND_URL}/generate-token`, {
+            params: {
+                phone: phone,
+                name: name
+            }
+        });
+
+        // Extract the token from the response
+        const token = response.data.token;
+        return `${process.env.WEB_APP_URL}/booking?token=${token}`;
+    } catch (error) {
+        console.error('Error generating booking link:', error.response?.data || error.message);
+        throw new Error('Failed to generate booking link');
+    }
 }
 
-function generateModifyLink(id) {
-    // Call the generate-token endpoint
-    const response = axios.get(`${process.env.BACKEND_URL}/generate-token`, {
-        params: {
-            id: id || ''
-        }
-    });
-
-    // Extract the token from the response
-    const token = response.data.token;
-    return `${process.env.WEB_APP_URL}/modify?token=${token}`;
+async function generateModifyLink(id) {
+    try {
+        // Call the generate-token endpoint
+        const response = await axios.get(`${process.env.BACKEND_URL}/generate-token`, {
+            params: {
+                id: id
+            }
+        });
+        // Extract the token from the response
+        const token = response.data.token;
+        return `${process.env.WEB_APP_URL}/modify?token=${token}`;
+    } catch (error) {
+        console.error('Error generating modify link:', error.response?.data || error.message);
+        throw new Error('Failed to generate modify link');
+    }
 }
 
 // Schedule reminders and follow-ups
