@@ -131,6 +131,7 @@ app.post('/api/bookings', async (req, res) => {
                 // Schedule check-in reminders
                 const booking = {
                   id: this.lastID,
+                  room_type: roomType,
                   check_in_date: checkInDate,
                   check_in_time: checkInTime,
                   phone: phone,
@@ -265,6 +266,7 @@ app.patch('/api/bookings/:id', async (req, res) => {
                   // Schedule new reminders
                   const updatedBooking = {
                     id: bookingId,
+                    room_type: roomType || booking.room_type,
                     check_in_date: checkInDate || booking.check_in_date,
                     check_in_time: checkInTime || booking.check_in_time,
                     phone: booking.phone,
@@ -411,6 +413,15 @@ function scheduleCheckInReminder(booking) {
 
   // Store jobs by booking ID
   scheduledJobs[booking.id] = [job24, job1];
+}
+async function sendCheckInReminder(phone, booking) {
+  try {
+    const reminderMessage = `Reminder: Your check-in is coming up!\n\nDetails:\nRoom Type: ${booking.room_type || "N/A"}\nCheck-in Date: ${booking.check_in_date}\nCheck-in Time: ${booking.check_in_time}\n\nWe look forward to hosting you!`;
+    await sendWhatsAppMessage(phone, reminderMessage);
+    console.log(`Check-in reminder sent to ${phone}`);
+  } catch (error) {
+    console.error(`Failed to send check-in reminder to ${phone}:`, error);
+  }
 }
 
 const PORT =  4000;
