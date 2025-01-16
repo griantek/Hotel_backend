@@ -15,6 +15,13 @@ const db = new sqlite3.Database('hotel.db');
 const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
 const WHATSAPP_ACCESS_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
 
+// Time format
+function formatTimeTo12Hour(time) {
+    const [hour, minute] = time.split(':');
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const formattedHour = hour % 12 || 12;
+    return `${formattedHour}:${minute} ${ampm}`;
+  }
 // Helper function to send WhatsApp messages
 async function sendWhatsAppMessage(to, messageData) {
     try {
@@ -258,18 +265,29 @@ async function sendLocation(phone) {
 
 // Generate booking/modify links
 function generateBookingLink(phone, name) {
-    const params = new URLSearchParams({
-        phone: phone,
-        name: name || ''
+    // Call the generate-token endpoint
+    const response = axios.get(`${process.env.BACKEND_URL}/generate-token`, {
+        params: {
+            phone: phone,
+            name: name
+        }
     });
-    return `${process.env.WEB_APP_URL}/booking?${params.toString()}`;
+    // Extract the token from the response
+    const token = response.data.token;
+    return `${process.env.WEB_APP_URL}/booking?token=${token}`;
 }
 
 function generateModifyLink(id) {
-    const params = new URLSearchParams({
-        id: id
+    // Call the generate-token endpoint
+    const response = axios.get(`${process.env.BACKEND_URL}/generate-token`, {
+        params: {
+            id: id || ''
+        }
     });
-    return `${process.env.WEB_APP_URL}/modify?${params.toString()}`;
+
+    // Extract the token from the response
+    const token = response.data.token;
+    return `${process.env.WEB_APP_URL}/modify?token=${token}`;
 }
 
 // Schedule reminders and follow-ups
@@ -387,8 +405,8 @@ async function sendBookingDetails(phone, bookings) {
 
     const bookingsList = bookings.map(booking => 
         `Booking ID: ${booking.id}\n` +
-        `Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${booking.check_in_time}\n` +
-        `Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${booking.check_out_time}\n` +
+        `Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_in_time)}\n` +
+        `Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_out_time)}\n` +
         `Room type: ${booking.room_type}\n` +
         `Price: $${booking.total_price.toFixed(2)}\n`
     ).join('\n');

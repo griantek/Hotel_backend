@@ -14,6 +14,14 @@ const db = new sqlite3.Database('hotel.db');
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
+// time format
+function formatTimeTo12Hour(time) {
+  const [hour, minute] = time.split(':');
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const formattedHour = hour % 12 || 12;
+  return `${formattedHour}:${minute} ${ampm}`;
+}
+
 async function sendWhatsAppMessage(phoneNumber, message) {
   try {
     await axios.post(WHATSAPP_API_URL, {
@@ -72,7 +80,7 @@ db.serialize(() => {
   )`);
 });
 
-// Updated create booking endpoint with date-based pricing
+// create booking endpoint with date-based pricing
 app.post('/api/bookings', async (req, res) => {
   const { 
     name, 
@@ -137,7 +145,7 @@ app.post('/api/bookings', async (req, res) => {
                 // Create reminders
                 createReminders(bookingId, checkInDate, checkInTime);
 
-                const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} at ${checkInTime}\nCheck-out: ${checkOutDate} at ${checkOutTime}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
+                const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\nCheck-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
                 await sendWhatsAppMessage(phone, confirmationMessage);
 
                 res.json({
@@ -228,7 +236,7 @@ app.patch('/api/bookings/:id', async (req, res) => {
               // Create new reminders
               createReminders(bookingId, checkInDate, checkInTime);
 
-              const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${checkInTime || booking.check_in_time}\nCheck-out: ${checkOutDate || booking.check_out_date} ${checkOutTime || booking.check_out_time}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
+              const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${formatTimeTo12Hour(checkInTime) || formatTimeTo12Hour(booking.check_in_time)}\nCheck-out: ${checkOutDate || booking.check_out_date} ${formatTimeTo12Hour(checkOutTime) || formatTimeTo12Hour(booking.check_out_time)}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
               
               await sendWhatsAppMessage(booking.phone, modificationMessage);
               res.json({
@@ -370,13 +378,75 @@ cron.schedule('* * * * *', () => {
     }
 
     rows.forEach(async (reminder) => {
-      const message = `Dear Customer, this is a friendly reminder that your booking for a ${reminder.room_type} on ${reminder.check_in_date} at ${reminder.check_in_time}. We look forward to welcoming you!`;
+      const message = `Dear Customer, this is a friendly reminder that your booking for a ${reminder.room_type} on ${reminder.check_in_date} at ${formatTimeTo12Hour(reminder.check_in_time)}. We look forward to welcoming you!`;
       await sendWhatsAppMessage(reminder.phone, message);
       console.log('Reminder sent:', message);
       // Delete reminder after sending
       db.run(`DELETE FROM reminders WHERE id = ?`, [reminder.id]);
     });
   });
+});
+
+// Middleware to clean up expired tokens periodically
+setInterval(() => {
+  console.log(tokenStore)
+  const now = Date.now();
+  for (const token in tokenStore) {
+    if (tokenStore[token].expiresAt < now) {
+      delete tokenStore[token]; // Remove expired token
+    }
+  }  
+}, 60000); // Run cleanup every minute
+
+// Helper function to generate an 8-character random alphanumeric token
+function generateSimpleToken() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let token = "";
+  for (let i = 0; i < 8; i++) {
+      token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+// In-memory storage for tokens (key-value store: token -> phone)
+const tokenStore = {};  
+// Updated /generate-token
+app.get("/generate-token", (req, res) => {
+  const { phone, name, id } = req.query;
+  
+  try {
+    const token = generateSimpleToken(); // Generate a token
+    const expiresAt = Date.now() + 10 * 60 * 1000; // Set expiration time to 10 minutes from now
+    tokenStore[token] = { phone, name, id, expiresAt }; // Store token with both phone and name
+    console.log("token generated")
+    console.log(tokenStore)
+    res.json({ token });
+    
+  } catch (error) {
+    console.error("Error generating token:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+// Updated /validate-token
+app.get("/validate-token", (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: "Token is required" });
+  try {
+    const data = tokenStore[token]; // Retrieve phone and name using token
+    console.log("token retrieved")
+    if (!data) throw new Error("Token not found");
+
+    // Check if token is expired
+    if (Date.now() > data.expiresAt) {
+      delete tokenStore[token]; // Remove expired token
+      throw new Error("Token has expired");
+    }
+
+    res.json(data); // Respond with phone and name
+  } catch (error) {
+    console.error("Invalid token:", error);
+    console.log("token retrieved")
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
 });
 
 const PORT =  4000;
