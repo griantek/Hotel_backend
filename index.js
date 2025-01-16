@@ -415,6 +415,7 @@ function scheduleCheckInReminder(booking) {
 
   // Store jobs by booking ID
   scheduledJobs[booking.id] = [job24, job1];
+  console.log(scheduledJobs)
 }
 async function sendCheckInReminder(phone, booking) {
   try {
