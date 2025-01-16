@@ -179,102 +179,64 @@ app.patch('/api/bookings/:id', async (req, res) => {
             return res.status(404).json({ error: 'Booking not found' });
           }
 
-          // Calculate number of days based on dates only
+          // Calculate total price based on the new dates
           const checkInDay = moment(checkInDate || booking.check_in_date);
           const checkOutDay = moment(checkOutDate || booking.check_out_date);
-          const numberOfDays = checkOutDay.diff(checkInDay, 'days') ; // Including both check-in and check-out days
-
+          const numberOfDays = checkOutDay.diff(checkInDay, 'days'); // Including both check-in and check-out days
           const totalPrice = numberOfDays * booking.roomPricePerDay;
 
-          // Check room availability with time
-          db.get(
-            `SELECT COUNT(*) as bookingCount, 
-                    (SELECT availability FROM rooms WHERE type = ?) as totalRooms
-             FROM bookings 
-             WHERE room_type = ? 
-               AND status = 'confirmed'
-               AND (
-                 (datetime(check_in_date || ' ' || check_in_time) <= datetime(? || ' ' || ?)
-                  AND datetime(check_out_date || ' ' || check_out_time) > datetime(? || ' ' || ?))
-                 OR 
-                 (datetime(check_in_date || ' ' || check_in_time) < datetime(? || ' ' || ?)
-                  AND datetime(check_out_date || ' ' || check_out_time) >= datetime(? || ' ' || ?))
-               )`,
+          // Update booking details
+          db.run(
+            `UPDATE bookings 
+             SET room_type = ?, 
+                 check_in_date = ?, 
+                 check_in_time = ?,
+                 check_out_date = ?, 
+                 check_out_time = ?,
+                 guest_count = ?, 
+                 total_price = ?,
+                 notes = ?
+             WHERE id = ?`,
             [
               roomType || booking.room_type,
-              roomType || booking.room_type,
-              checkOutDate || booking.check_out_date,
-              checkOutTime || booking.check_out_time,
               checkInDate || booking.check_in_date,
               checkInTime || booking.check_in_time,
               checkOutDate || booking.check_out_date,
               checkOutTime || booking.check_out_time,
-              checkInDate || booking.check_in_date,
-              checkInTime || booking.check_in_time
+              guestCount || booking.guest_count,
+              totalPrice,
+              notes !== undefined ? notes : booking.notes,
+              bookingId,
             ],
-            (err, availability) => {
+            async function(err) {
               if (err) {
                 return res.status(500).json({ error: err.message });
               }
 
-              if (availability.bookingCount >= availability.totalRooms) {
-                return res.status(400).json({ error: 'Requested room type is not available for the selected dates and times' });
+              // Cancel previous reminders
+              if (scheduledJobs[bookingId]) {
+                scheduledJobs[bookingId].forEach(job => job.cancel());
+                delete scheduledJobs[bookingId];
               }
 
-              // Update booking
-              db.run(
-                `UPDATE bookings 
-                 SET room_type = ?, 
-                     check_in_date = ?, 
-                     check_in_time = ?,
-                     check_out_date = ?, 
-                     check_out_time = ?,
-                     guest_count = ?, 
-                     total_price = ?,
-                     notes = ?
-                 WHERE id = ?`,
-                [
-                  roomType || booking.room_type,
-                  checkInDate || booking.check_in_date,
-                  checkInTime || booking.check_in_time,
-                  checkOutDate || booking.check_out_date,
-                  checkOutTime || booking.check_out_time,
-                  guestCount || booking.guest_count,
-                  totalPrice,
-                  notes !== undefined ? notes : booking.notes,
-                  bookingId,
-                ],
-                async function(err) {
-                  if (err) {
-                    return res.status(500).json({ error: err.message });
-                  }
+              // Schedule new reminders
+              const updatedBooking = {
+                id: bookingId,
+                room_type: roomType || booking.room_type,
+                check_in_date: checkInDate || booking.check_in_date,
+                check_in_time: checkInTime || booking.check_in_time,
+                phone: booking.phone,
+              };
+              scheduleCheckInReminder(updatedBooking);
 
-                  // Cancel previous reminders
-                  if (scheduledJobs[bookingId]) {
-                    scheduledJobs[bookingId].forEach(job => job.cancel());
-                    delete scheduledJobs[bookingId];
-                  }
-
-                  // Schedule new reminders
-                  const updatedBooking = {
-                    id: bookingId,
-                    room_type: roomType || booking.room_type,
-                    check_in_date: checkInDate || booking.check_in_date,
-                    check_in_time: checkInTime || booking.check_in_time,
-                    phone: booking.phone,
-                  };
-                  scheduleCheckInReminder(updatedBooking);
-
-                  const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${checkInTime || booking.check_in_time}\nCheck-out: ${checkOutDate || booking.check_out_date} ${checkOutTime || booking.check_out_time}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
-                  
-                  await sendWhatsAppMessage(booking.phone, modificationMessage);
-                  res.json({
-                    message: 'Booking modified successfully',
-                    bookingId: bookingId,
-                    numberOfDays: numberOfDays
-                  });
-                }
-              );
+              const modificationMessage = `Your booking has been modified!\n\nUpdated Details:\nRoom Type: ${roomType || booking.room_type}\nCheck-in: ${checkInDate || booking.check_in_date} ${checkInTime || booking.check_in_time}\nCheck-out: ${checkOutDate || booking.check_out_date} ${checkOutTime || booking.check_out_time}\nGuests: ${guestCount || booking.guest_count}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${bookingId}`;
+              
+              await sendWhatsAppMessage(booking.phone, modificationMessage);
+              res.json({
+                message: 'Booking modified successfully',
+                bookingId: bookingId,
+                numberOfDays: numberOfDays
+              });
             }
           );
         }
