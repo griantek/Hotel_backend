@@ -361,6 +361,8 @@ function createReminders(bookingId, checkInDate, checkInTime) {
 //send  reminder
 cron.schedule('* * * * *', () => {
   const now = moment().format('YYYY-MM-DD HH:mm:ss');
+  now.setHours(now.getHours() + 5);   // Add 5 hours
+  now.setMinutes(now.getMinutes() + 30); // Add 30 minutes  
   console.log('Checking for reminders:', now);
   db.all(`SELECT reminders.*, bookings.room_type, bookings.check_in_date, bookings.check_in_time, users.phone 
           FROM reminders 
