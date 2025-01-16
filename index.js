@@ -130,16 +130,6 @@ app.post('/api/bookings', async (req, res) => {
                 const confirmationMessage = `Thank you for your booking!\n\nDetails:\nRoom Type: ${roomType}\nCheck-in: ${checkInDate} at ${checkInTime}\nCheck-out: ${checkOutDate} at ${checkOutTime}\nGuests: ${guestCount}\nTotal Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\nBooking ID: ${this.lastID}`;
                 await sendWhatsAppMessage(phone, confirmationMessage);
 
-                // Schedule check-in reminders
-                const booking = {
-                  id: this.lastID,
-                  room_type: roomType,
-                  check_in_date: checkInDate,
-                  check_in_time: checkInTime,
-                  phone: phone,
-                };
-                scheduleCheckInReminder(booking);
-
                 res.json({
                   message: 'Booking created successfully',
                   bookingId: this.lastID,
@@ -396,38 +386,6 @@ app.get('/api/bookings/:id', (req, res) => {
   );
 });
 
-function scheduleCheckInReminder(booking) {
-  const checkInDateTime = new Date(`${booking.check_in_date}T${booking.check_in_time}`);
-  checkInDateTime.setHours(checkInDateTime.getHours() + 5);   // Add 5 hours
-  checkInDateTime.setMinutes(checkInDateTime.getMinutes() + 30); // Add 30 minutes  
-  // Schedule 24-hour reminder
-  const reminderTime24Hours = new Date(checkInDateTime);
-  
-  reminderTime24Hours.setHours(reminderTime24Hours.getHours() - 24);
-  const job24 = schedule.scheduleJob(reminderTime24Hours, async () => {
-    await sendCheckInReminder(booking.phone, booking);
-  });
-
-  // Schedule 1-hour reminder
-  const reminderTime1Hour = new Date(checkInDateTime);
-  reminderTime1Hour.setHours(reminderTime1Hour.getHours() - 1);
-  const job1 = schedule.scheduleJob(reminderTime1Hour, async () => {
-    await sendCheckInReminder(booking.phone, booking);
-  });
-
-  // Store jobs by booking ID
-  scheduledJobs[booking.id] = [job24, job1];
-  console.log(scheduledJobs)
-}
-async function sendCheckInReminder(phone, booking) {
-  try {
-    const reminderMessage = `Reminder: Your check-in is coming up!\n\nDetails:\nRoom Type: ${booking.room_type || "N/A"}\nCheck-in Date: ${booking.check_in_date}\nCheck-in Time: ${booking.check_in_time}\n\nWe look forward to hosting you!`;
-    await sendWhatsAppMessage(phone, reminderMessage);
-    console.log(`Check-in reminder sent to ${phone}`);
-  } catch (error) {
-    console.error(`Failed to send check-in reminder to ${phone}:`, error);
-  }
-}
 
 const PORT =  4000;
 app.listen(PORT, () => {
