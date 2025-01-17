@@ -730,27 +730,33 @@ app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) =
   const bookingId = req.params.id;
   
   try {
-    const booking = await db.get(
-      `SELECT b.*, u.phone 
+    // Get booking details with user info
+    db.get(
+      `SELECT b.*, u.phone, u.name as guest_name
        FROM bookings b
        JOIN users u ON b.user_id = u.id
        WHERE b.id = ?`,
-      [bookingId]
+      [bookingId],
+      async (err, booking) => {
+        if (err || !booking) {
+          return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        const formattedTime = formatTimeTo12Hour(booking.check_in_time);
+        const message = `Dear ${booking.guest_name}, this is a reminder for your booking check-in on ${booking.check_in_date} at ${formattedTime}. We look forward to welcoming you!`;
+        
+        try {
+          await sendWhatsAppMessage(booking.phone, message);
+          res.json({ message: 'Reminder sent successfully' });
+        } catch (error) {
+          console.error('WhatsApp notification error:', error);
+          res.status(500).json({ error: 'Failed to send notification' });
+        }
+      }
     );
-
-    if (!booking) {
-      return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    const message = `Reminder: Your booking at our hotel is scheduled for ${booking.check_in_date} at ${formatTimeTo12Hour(booking.check_in_time)}. Please ensure timely check-in.`;
-    
-    await sendWhatsAppMessage(booking.phone, message);
-    
-    db.run('UPDATE bookings SET notification_sent = 1 WHERE id = ?', [bookingId]);
-    
-    res.json({ message: 'Reminder sent successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Server error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
