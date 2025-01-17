@@ -638,6 +638,47 @@ app.get("/validate-token", (req, res) => {
   }
 });
 
+// Admin endpoint with authentication
+app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+  const bookingId = req.params.id;
+  
+  try {
+    // First get booking and user details for notification
+    db.get(
+      `SELECT b.*, u.phone 
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id 
+       WHERE b.id = ?`, 
+      [bookingId],
+      async (err, booking) => {
+        if (err || !booking) {
+          return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        // Update status to cancelled
+        db.run(
+          `UPDATE bookings SET status = 'cancelled' WHERE id = ?`, 
+          [bookingId], 
+          async function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            
+            // Delete reminders
+            db.run(`DELETE FROM reminders WHERE booking_id = ?`, [bookingId]);
+            
+            // Send cancellation notification
+            const message = `Your booking (ID: ${bookingId}) has been cancelled by admin.`;
+            await sendWhatsAppMessage(booking.phone, message);
+
+            res.json({ message: 'Booking cancelled successfully' });
+          }
+        );
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT =  4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
