@@ -66,6 +66,7 @@ db.serialize(() => {
     room_number TEXT,
     notification_sent BOOLEAN DEFAULT 0,
     checkout_reminder_sent BOOLEAN DEFAULT 0,
+    checkin_status TEXT DEFAULT 'not yet',
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users (id)
   )`);
