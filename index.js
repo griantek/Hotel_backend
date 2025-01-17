@@ -700,6 +700,7 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
     'checkin_status',
     'room_number',
     'room_type',
+    'status',
     'guest_count',
     'notes'
   ];
