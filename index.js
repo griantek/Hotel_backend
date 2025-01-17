@@ -519,6 +519,8 @@ app.get('/api/bookings/:id', (req, res) => {
       b.check_out_date,
       b.check_out_time,
       b.guest_count,
+      b.status,
+      b.paid_status,
       b.total_price,
       b.notes,
       u.name as guest_name,
@@ -641,7 +643,7 @@ app.get("/validate-token", (req, res) => {
 // Admin endpoint with authentication
 app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
   const bookingId = req.params.id;
-  
+
   try {
     // First get booking and user details for notification
     db.get(
