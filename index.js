@@ -62,6 +62,9 @@ db.serialize(() => {
     status TEXT DEFAULT 'confirmed',
     total_price REAL NOT NULL,
     paid_status TEXT DEFAULT 'unpaid',
+    verification_status TEXT DEFAULT 'pending' CHECK(verification_status IN ('pending', 'verified', 'not_verified')),
+    room_number TEXT,
+    notification_sent BOOLEAN DEFAULT 0,
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users (id)
   )`);
@@ -676,6 +679,76 @@ app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
         );
       }
     );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update booking status (payment, verification, room)
+app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) => {
+  const { paid_status, verification_status, room_number } = req.body;
+  const bookingId = req.params.id;
+
+  try {
+    const updateFields = [];
+    const values = [];
+
+    if (paid_status) {
+      updateFields.push('paid_status = ?');
+      values.push(paid_status);
+    }
+    if (verification_status) {
+      updateFields.push('verification_status = ?');
+      values.push(verification_status);
+    }
+    if (room_number) {
+      updateFields.push('room_number = ?');
+      values.push(room_number);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(bookingId);
+
+    db.run(
+      `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
+      values,
+      function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Booking updated successfully' });
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send reminder notification
+app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) => {
+  const bookingId = req.params.id;
+  
+  try {
+    const booking = await db.get(
+      `SELECT b.*, u.phone 
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id
+       WHERE b.id = ?`,
+      [bookingId]
+    );
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const message = `Reminder: Your booking at our hotel is scheduled for ${booking.check_in_date} at ${formatTimeTo12Hour(booking.check_in_time)}. Please ensure timely check-in.`;
+    
+    await sendWhatsAppMessage(booking.phone, message);
+    
+    db.run('UPDATE bookings SET notification_sent = 1 WHERE id = ?', [bookingId]);
+    
+    res.json({ message: 'Reminder sent successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
