@@ -62,7 +62,7 @@ db.serialize(() => {
     status TEXT DEFAULT 'confirmed',
     total_price REAL NOT NULL,
     paid_status TEXT DEFAULT 'unpaid',
-    verification_status TEXT DEFAULT 'pending' CHECK(verification_status IN ('pending', 'verified', 'not_verified')),
+    verification_status TEXT DEFAULT 'pending',
     room_number TEXT,
     notification_sent BOOLEAN DEFAULT 0,
     notes TEXT,
