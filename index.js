@@ -144,7 +144,8 @@ app.get('/admin/bookings', authenticateAdmin, (req, res) => {
       total_price: b.total_price,
       status: b.status,
       paid_status: b.paid_status,
-      notes: b.notes
+      notes: b.notes,
+      checkin_status: b.checkin_status
     }));
     
     res.json(formattedBookings);
