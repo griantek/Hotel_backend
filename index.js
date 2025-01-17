@@ -696,6 +696,7 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
   const allowedFields = [
     'paid_status', 
     'verification_status', 
+    'checkin_status',
     'room_number',
     'room_type',
     'guest_count',
