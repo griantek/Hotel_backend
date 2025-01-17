@@ -110,10 +110,39 @@ app.get('/admin/users', authenticateAdmin, (req, res) => {
 });
 
 // View bookings
+
 app.get('/admin/bookings', authenticateAdmin, (req, res) => {
-  db.all('SELECT * FROM bookings', (err, bookings) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(bookings);
+  db.all(`
+    SELECT 
+      b.*,
+      u.id as user_id,
+      u.name as user_name,
+      u.phone as user_phone
+    FROM bookings b
+    LEFT JOIN users u ON b.user_id = u.id
+  `, (err, bookings) => {
+    if (err) return res.status(500).json({ error: err.message });
+    
+    const formattedBookings = bookings.map(b => ({
+      id: b.id,
+      user: {
+        id: b.user_id,
+        name: b.user_name,
+        phone: b.user_phone
+      },
+      room_type: b.room_type,
+      check_in_date: b.check_in_date,
+      check_in_time: b.check_in_time,
+      check_out_date: b.check_out_date,
+      check_out_time: b.check_out_time,
+      guest_count: b.guest_count,
+      total_price: b.total_price,
+      status: b.status,
+      paid_status: b.paid_status,
+      notes: b.notes
+    }));
+    
+    res.json(formattedBookings);
   });
 });
 //Manage rooms
