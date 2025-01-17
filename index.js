@@ -525,6 +525,8 @@ app.get('/api/bookings/:id', (req, res) => {
       b.status,
       b.paid_status,
       b.total_price,
+      b.verification_status,
+      b.room_number,
       b.notes,
       u.name as guest_name,
       u.phone as guest_phone
