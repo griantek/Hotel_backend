@@ -689,44 +689,77 @@ app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
 
 // Update booking status (payment, verification, room)
 app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) => {
-  const { paid_status, verification_status, room_number } = req.body;
   const bookingId = req.params.id;
+  const updates = req.body;
+  const allowedFields = [
+    'paid_status', 
+    'verification_status', 
+    'room_number',
+    'room_type',
+    'guest_count',
+    'notes'
+  ];
 
   try {
     const updateFields = [];
     const values = [];
 
-    if (paid_status) {
-      updateFields.push('paid_status = ?');
-      values.push(paid_status);
-    }
-    if (verification_status) {
-      updateFields.push('verification_status = ?');
-      values.push(verification_status);
-    }
-    if (room_number) {
-      updateFields.push('room_number = ?');
-      values.push(room_number);
-    }
+    Object.entries(updates).forEach(([key, value]) => {
+      if (allowedFields.includes(key) && value !== undefined) {
+        updateFields.push(`${key} = ?`);
+        values.push(value);
+      }
+    });
 
     if (updateFields.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
+      return res.status(400).json({ error: 'No valid fields to update' });
     }
 
     values.push(bookingId);
+
+    // If room type is being updated, check availability
+    if (updates.room_type) {
+      const roomAvailable = await checkRoomAvailability(
+        updates.room_type, 
+        bookingId
+      );
+      if (!roomAvailable) {
+        return res.status(400).json({ error: 'Room type not available' });
+      }
+    }
 
     db.run(
       `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
       values,
       function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Booking updated successfully' });
+        res.json({ 
+          message: 'Booking updated successfully',
+          updatedFields: Object.keys(updates)
+        });
       }
     );
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper function to check room availability
+async function checkRoomAvailability(roomType, excludeBookingId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+        (SELECT availability FROM rooms WHERE type = ?) as total_rooms,
+        (SELECT COUNT(*) FROM bookings 
+         WHERE room_type = ? AND status = 'confirmed' AND id != ?) as booked_rooms`,
+      [roomType, roomType, excludeBookingId],
+      (err, result) => {
+        if (err) reject(err);
+        resolve(result.total_rooms > result.booked_rooms);
+      }
+    );
+  });
+}
 
 // Send reminder notification
 app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) => {
