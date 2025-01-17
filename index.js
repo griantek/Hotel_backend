@@ -65,6 +65,7 @@ db.serialize(() => {
     verification_status TEXT DEFAULT 'pending',
     room_number TEXT,
     notification_sent BOOLEAN DEFAULT 0,
+    checkout_reminder_sent BOOLEAN DEFAULT 0,
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users (id)
   )`);
@@ -762,6 +763,49 @@ app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) =
   }
 });
 
+// Add checkout reminder endpoint
+app.post('/api/admin/bookings/:id/checkout-notify', authenticateAdmin, async (req, res) => {
+  const bookingId = req.params.id;
+  
+  try {
+    // Generate feedback token
+    const feedbackToken = generateSimpleToken();
+    const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+    tokenStore[feedbackToken] = { bookingId, expiresAt };
+
+    db.get(
+      `SELECT b.*, u.phone, u.name as guest_name
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id
+       WHERE b.id = ?`,
+      [bookingId],
+      async (err, booking) => {
+        if (err || !booking) {
+          return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        const feedbackUrl = `${process.env.FRONTEND_URL}/feedback/${feedbackToken}`;
+        const message = `Dear ${booking.guest_name}, this is a reminder for your check-out today at ${formatTimeTo12Hour(booking.check_out_time)}. Please ensure timely check-out.\n\nWe'd love to hear your feedback: ${feedbackUrl}`;
+        
+        try {
+          await sendWhatsAppMessage(booking.phone, message);
+          
+          // Update checkout reminder status
+          db.run(
+            `UPDATE bookings SET checkout_reminder_sent = 1 WHERE id = ?`,
+            [bookingId]
+          );
+
+          res.json({ message: 'Checkout reminder sent successfully' });
+        } catch (error) {
+          res.status(500).json({ error: 'Failed to send notification' });
+        }
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 const PORT =  4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
