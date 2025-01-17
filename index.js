@@ -66,7 +66,7 @@ db.serialize(() => {
     room_number TEXT,
     notification_sent BOOLEAN DEFAULT 0,
     checkout_reminder_sent BOOLEAN DEFAULT 0,
-    checkin_status TEXT DEFAULT 'not yet',
+    checkin_status TEXT DEFAULT 'pending',
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users (id)
   )`);
@@ -531,6 +531,7 @@ app.get('/api/bookings/:id', (req, res) => {
       b.verification_status,
       b.room_number,
       b.notes,
+      b.checkin_status,
       u.name as guest_name,
       u.phone as guest_phone
     FROM bookings b
