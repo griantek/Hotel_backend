@@ -68,6 +68,8 @@ db.serialize(() => {
     checkout_reminder_sent BOOLEAN DEFAULT 0,
     checkin_status TEXT DEFAULT 'pending',
     notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users (id)
   )`);
 
