@@ -248,10 +248,8 @@ app.post('/admin/notify', authenticateAdmin, async (req, res) => {
 });
 // View statics
 app.get('/admin/stats', authenticateAdmin, (req, res) => {
-  // Get current date
   const today = new Date().toISOString().split('T')[0];
 
-  // Parallel queries using Promise.all
   Promise.all([
     // Total bookings and revenue
     new Promise((resolve, reject) => {
@@ -272,14 +270,13 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
       db.all(
         `SELECT 
          r.type,
-         COUNT(*) as total,
-         COUNT(b.id) as occupied
-         FROM rooms r
-         LEFT JOIN bookings b ON r.type = b.room_type
-         AND b.status = 'confirmed'
-         AND b.check_in_date <= ? 
-         AND b.check_out_date > ?
-         GROUP BY r.type`,
+         r.availability as total,
+         (SELECT COUNT(*) FROM bookings b 
+          WHERE b.room_type = r.type 
+          AND b.status = 'confirmed'
+          AND b.check_in_date <= ? 
+          AND b.check_out_date > ?) as occupied
+         FROM rooms r`,
         [today, today],
         (err, results) => {
           if (err) reject(err);
@@ -295,11 +292,10 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
          b.id,
          u.name as guest_name,
          b.check_in_date,
-         r.type,
+         b.room_type as type,
          b.total_price,
          b.status
          FROM bookings b
-         JOIN rooms r ON b.room_type = r.type
          JOIN users u ON b.user_id = u.id
          ORDER BY b.created_at DESC
          LIMIT 10`,
@@ -311,20 +307,18 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
     })
   ])
     .then(([basicStats, roomResults, recentBookings]) => {
-      // Calculate room stats
       const roomStats = {};
       let totalRooms = 0;
       let totalOccupied = 0;
 
-      roomResults.forEach(({ room_type, total, occupied }) => {
-        roomStats[room_type] = { total, occupied };
+      roomResults.forEach(({ type, total, occupied }) => {
+        roomStats[type] = { total, occupied };
         totalRooms += total;
         totalOccupied += occupied;
       });
 
-      // Calculate occupancy rate
       const occupancyRate = totalRooms > 0 
-        ? (totalOccupied / totalRooms) * 100 
+        ? Math.round((totalOccupied / totalRooms) * 100) 
         : 0;
 
       res.json({
