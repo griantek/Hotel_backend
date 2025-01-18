@@ -291,13 +291,14 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
       db.all(
         `SELECT 
          b.id,
-         b.guest_name,
+         u.name as guest_name,
          b.check_in_date,
          r.type,
          b.total_price,
          b.status
          FROM bookings b
          JOIN rooms r ON b.room_type = r.type
+         JOIN users u ON b.user_id = u.id
          ORDER BY b.created_at DESC
          LIMIT 10`,
         (err, results) => {
