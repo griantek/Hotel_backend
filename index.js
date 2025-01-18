@@ -822,7 +822,7 @@ app.post('/api/admin/bookings/:id/checkout-notify', authenticateAdmin, async (re
           return res.status(404).json({ error: 'Booking not found' });
         }
 
-        const feedbackUrl = `${process.env.FRONTEND_URL}/feedback/${feedbackToken}`;
+        const feedbackUrl = `${process.env.WEB_APP_URL}/feedback?id=${feedbackToken}`;
         const message = `Dear ${booking.guest_name}, this is a reminder for your check-out today at ${formatTimeTo12Hour(booking.check_out_time)}. Please ensure timely check-out.\n\nWe'd love to hear your feedback: ${feedbackUrl}`;
         
         try {
@@ -844,6 +844,56 @@ app.post('/api/admin/bookings/:id/checkout-notify', authenticateAdmin, async (re
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+//Automatic cancellation
+cron.schedule('0 0 * * *', () => {
+  const yesterday = moment().subtract(1, 'days').format('YYYY-MM-DD');
+  console.log('Running automatic cancellation task for bookings with check-in date:', yesterday);
+
+  db.all(
+    `SELECT b.id, b.check_in_date, u.phone, u.name 
+     FROM bookings b
+     JOIN users u ON b.user_id = u.id
+     WHERE b.check_in_date = ? 
+       AND b.status = 'confirmed' 
+       AND b.checkin_status = 'pending'`,
+    [yesterday],
+    async (err, bookings) => {
+      if (err) {
+        return console.error('Error fetching bookings for cancellation:', err.message);
+      }
+
+      if (bookings.length === 0) {
+        console.log('No bookings to cancel.');
+        return;
+      }
+
+      for (const booking of bookings) {
+        // Cancel booking
+        db.run(
+          `UPDATE bookings SET status = 'cancelled' WHERE id = ?`,
+          [booking.id],
+          async (err) => {
+            if (err) {
+              return console.error(`Error cancelling booking ID ${booking.id}:`, err.message);
+            }
+
+            console.log(`Booking ID ${booking.id} has been cancelled.`);
+
+            // Notify user about the cancellation
+            const message = `Dear ${booking.name}, your booking (ID: ${booking.id}) has been automatically cancelled because you did not check in on ${booking.check_in_date}. If you have any questions, please contact us.`;
+            try {
+              await sendWhatsAppMessage(booking.phone, message);
+              console.log(`Notification sent to ${booking.phone} for booking ID ${booking.id}.`);
+            } catch (notificationError) {
+              console.error(`Error sending notification for booking ID ${booking.id}:`, notificationError);
+            }
+          }
+        );
+      }
+    }
+  );
+});
+
 const PORT =  4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
