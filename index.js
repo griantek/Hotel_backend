@@ -269,7 +269,7 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
     new Promise((resolve, reject) => {
       db.all(
         `SELECT 
-         r.room_type,
+         r.type,
          COUNT(*) as total,
          COUNT(b.id) as occupied
          FROM rooms r
@@ -277,7 +277,7 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
          AND b.status = 'confirmed'
          AND b.check_in_date <= ? 
          AND b.check_out_date > ?
-         GROUP BY r.room_type`,
+         GROUP BY r.type`,
         [today, today],
         (err, results) => {
           if (err) reject(err);
@@ -293,7 +293,7 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
          b.id,
          b.guest_name,
          b.check_in_date,
-         r.room_type,
+         r.type,
          b.total_price,
          b.status
          FROM bookings b
