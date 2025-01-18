@@ -340,7 +340,7 @@ async function getUserBookings(userId) {
     return new Promise((resolve, reject) => {
         db.all(
             `SELECT * FROM bookings 
-             WHERE user_id = ? AND status != 'cancelled' 
+             WHERE user_id = ? AND status == 'confirmed' 
              ORDER BY check_in_date DESC`,
             [userId],
             (err, rows) => {
