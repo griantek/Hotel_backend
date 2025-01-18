@@ -273,7 +273,7 @@ app.get('/admin/stats', authenticateAdmin, (req, res) => {
          COUNT(*) as total,
          COUNT(b.id) as occupied
          FROM rooms r
-         LEFT JOIN bookings b ON r.type = b.type
+         LEFT JOIN bookings b ON r.type = b.room_type
          AND b.status = 'confirmed'
          AND b.check_in_date <= ? 
          AND b.check_out_date > ?
