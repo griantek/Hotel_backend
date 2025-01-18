@@ -246,22 +246,95 @@ app.post('/admin/notify', authenticateAdmin, async (req, res) => {
 });
 // View statics
 app.get('/admin/stats', authenticateAdmin, (req, res) => {
-  db.get(
-    `SELECT 
-     COUNT(*) as totalBookings,
-     IFNULL(SUM(total_price), 0) as totalRevenue
-     FROM bookings WHERE status = 'confirmed'`,
-    (err, stats) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({
-        totalBookings: stats.totalBookings,
-        totalRevenue: stats.totalRevenue,
-        occupancyRate: 0, // Placeholder if occupancyRate calculation is missing
-        roomStats: {},   // Placeholder if roomStats are not fetched
-        recentBookings: [] // Placeholder if recentBookings are not fetched
+  // Get current date
+  const today = new Date().toISOString().split('T')[0];
+
+  // Parallel queries using Promise.all
+  Promise.all([
+    // Total bookings and revenue
+    new Promise((resolve, reject) => {
+      db.get(
+        `SELECT 
+         COUNT(*) as totalBookings,
+         IFNULL(SUM(total_price), 0) as totalRevenue
+         FROM bookings WHERE status = 'confirmed'`,
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        }
+      );
+    }),
+
+    // Room stats and occupancy
+    new Promise((resolve, reject) => {
+      db.all(
+        `SELECT 
+         r.room_type,
+         COUNT(*) as total,
+         COUNT(b.id) as occupied
+         FROM rooms r
+         LEFT JOIN bookings b ON r.id = b.room_id 
+         AND b.status = 'confirmed'
+         AND b.check_in_date <= ? 
+         AND b.check_out_date > ?
+         GROUP BY r.room_type`,
+        [today, today],
+        (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        }
+      );
+    }),
+
+    // Recent bookings
+    new Promise((resolve, reject) => {
+      db.all(
+        `SELECT 
+         b.id,
+         b.guest_name,
+         b.check_in_date,
+         r.room_type,
+         b.total_price,
+         b.status
+         FROM bookings b
+         JOIN rooms r ON b.room_id = r.id
+         ORDER BY b.created_at DESC
+         LIMIT 10`,
+        (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        }
+      );
+    })
+  ])
+    .then(([basicStats, roomResults, recentBookings]) => {
+      // Calculate room stats
+      const roomStats = {};
+      let totalRooms = 0;
+      let totalOccupied = 0;
+
+      roomResults.forEach(({ room_type, total, occupied }) => {
+        roomStats[room_type] = { total, occupied };
+        totalRooms += total;
+        totalOccupied += occupied;
       });
-    }
-  );
+
+      // Calculate occupancy rate
+      const occupancyRate = totalRooms > 0 
+        ? (totalOccupied / totalRooms) * 100 
+        : 0;
+
+      res.json({
+        totalBookings: basicStats.totalBookings,
+        totalRevenue: basicStats.totalRevenue,
+        occupancyRate,
+        roomStats,
+        recentBookings
+      });
+    })
+    .catch(error => {
+      res.status(500).json({ error: error.message });
+    });
 });
 // Middleware to authenticate admin
 function authenticateAdmin(req, res, next) {
