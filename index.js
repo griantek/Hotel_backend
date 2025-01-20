@@ -772,12 +772,26 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
     'room_type',
     'status',
     'guest_count',
-    'notes'
+    'notes',
+    'check_in_date',
+    'check_in_time', 
+    'check_out_date',
+    'check_out_time'
   ];
 
   try {
     const updateFields = [];
     const values = [];
+
+    // Validate dates if they are being updated
+    if (updates.check_in_date && updates.check_out_date) {
+      const checkInDate = moment(updates.check_in_date);
+      const checkOutDate = moment(updates.check_out_date);
+      
+      if (!checkInDate.isValid() || !checkOutDate.isValid() || checkOutDate.isSameOrBefore(checkInDate)) {
+        return res.status(400).json({ error: 'Invalid date range' });
+      }
+    }
 
     Object.entries(updates).forEach(([key, value]) => {
       if (allowedFields.includes(key) && value !== undefined) {
@@ -792,16 +806,19 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
 
     values.push(bookingId);
 
-    // If room type is being updated, check availability
-    if (updates.room_type) {
+    // Check room availability
+    if (updates.room_type || updates.check_in_date || updates.check_out_date) {
       const roomAvailable = await checkRoomAvailability(
-        updates.room_type, 
+        updates.room_type || booking.room_type, 
         bookingId
       );
       if (!roomAvailable) {
-        return res.status(400).json({ error: 'Room type not available' });
+        return res.status(400).json({ error: 'Room not available for selected dates' });
       }
     }
+
+    // Add updated_at timestamp
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
 
     db.run(
       `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
@@ -818,7 +835,6 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
     res.status(500).json({ error: error.message });
   }
 });
-
 // Helper function to check room availability
 async function checkRoomAvailability(roomType, excludeBookingId) {
   return new Promise((resolve, reject) => {
