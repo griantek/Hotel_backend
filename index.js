@@ -408,23 +408,7 @@ app.post('/api/bookings', async (req, res) => {
                 const bookingId = this.lastID;
                 // Create reminders
                 createReminders(bookingId, checkInDate, checkInTime);
-                const confirmationMessage = `
-                                            🎉 Thank you for choosing us! 🎉\n\n
-
-                                            🌟 Booking Confirmation 🌟\n
-                                            Here are the details of your reservation:\n\n
-
-                                            🏨 Room Type: ${roomType}\n
-                                            🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n
-                                            🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n
-                                            👥 Guests: ${guestCount}\n
-                                            💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n
-
-                                            📌 Booking ID: ${this.lastID}\n\n
-
-                                            We’re excited to host you and ensure your stay is comfortable and memorable! If you have any questions or special requests, feel free to reach out.\n
-                                            Looking forward to welcoming you! 😊
-                                            `;
+                const confirmationMessage = `🎉 Thank you for choosing us! 🎉\n\n🌟 Booking Confirmation 🌟\nHere are the details of your reservation:\n\n🏨 Room Type: ${roomType}\n🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n👥 Guests: ${guestCount}\n💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n📌 Booking ID: ${this.lastID}\n\nWe’re excited to host you and ensure your stay is comfortable and memorable! If you have any questions or special requests, feel free to reach out.\nLooking forward to welcoming you! 😊`;
                 await sendWhatsAppMessage(phone, confirmationMessage);
 
                 res.json({
@@ -514,20 +498,7 @@ app.patch('/api/bookings/:id', async (req, res) => {
 
               // Create new reminders
               createReminders(bookingId, checkInDate, checkInTime);
-              const modificationMessage = `
-                                            ✨ Your booking has been successfully updated! ✨\n\n
-
-                                            📌 Updated Reservation Details:\n
-                                            🏨 Room Type: ${roomType || booking.room_type}\n
-                                            🗓️ Check-in: ${checkInDate || booking.check_in_date} at ${formatTimeTo12Hour(checkInTime) || formatTimeTo12Hour(booking.check_in_time)}\n
-                                            🗓️ Check-out: ${checkOutDate || booking.check_out_date} at ${formatTimeTo12Hour(checkOutTime) || formatTimeTo12Hour(booking.check_out_time)}\n
-                                            👥 Guests: ${guestCount || booking.guest_count}\n
-                                            💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n
-                                            📖 Booking ID: ${bookingId}\n\n
-
-                                            We’ve updated your booking as per your request and can’t wait to host you! If you need further assistance or have any questions, feel free to reach out to us anytime. 😊\n
-                                            Looking forward to welcoming you soon! 🌟
-                                            `;
+              const modificationMessage = `✨ Your booking has been successfully updated! ✨\n\n📌 Updated Reservation Details:\n🏨 Room Type: ${roomType || booking.room_type}\n🗓️ Check-in: ${checkInDate || booking.check_in_date} at ${formatTimeTo12Hour(checkInTime) || formatTimeTo12Hour(booking.check_in_time)}\n🗓️ Check-out: ${checkOutDate || booking.check_out_date} at ${formatTimeTo12Hour(checkOutTime) || formatTimeTo12Hour(booking.check_out_time)}\n👥 Guests: ${guestCount || booking.guest_count}\n💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n📖 Booking ID: ${bookingId}\n\nWe’ve updated your booking as per your request and can’t wait to host you! If you need further assistance or have any questions, feel free to reach out to us anytime. 😊 Looking forward to welcoming you soon! 🌟`;
               // Send modification notification              
               await sendWhatsAppMessage(booking.phone, modificationMessage);
               res.json({
@@ -784,7 +755,7 @@ app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
             db.run(`DELETE FROM reminders WHERE booking_id = ?`, [bookingId]);
             
             // Send cancellation notification
-            const message = `Your booking (ID: ${bookingId}) has been cancelled by admin.`;
+            const message = `We regret to inform you that your booking (ID: ${bookingId}) has been cancelled by the admin. If you have any questions or need further assistance, please don't hesitate to contact us. We're here to help!`;
             await sendWhatsAppMessage(booking.phone, message);
 
             res.json({ message: 'Booking cancelled successfully' });
@@ -923,17 +894,7 @@ app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) =
         }
 
         const formattedTime = formatTimeTo12Hour(booking.check_in_time);
-        const message = `
-                          Hello ${booking.guest_name}, \n\n
-                          
-                          ✨ Just a friendly reminder about your upcoming stay with us! ✨\n\n
-                          
-                          📅 Check-in Date: ${booking.check_in_date}  \n
-                          ⏰ Time: ${formattedTime}  \n\n
-                          
-                          We’re excited to welcome you and ensure your stay is comfortable and memorable. If you have any questions or special requests, feel free to reach out to us anytime.\n                     
-                          Looking forward to seeing you soon! 😊 
-                          `;        
+        const message = `Hello ${booking.guest_name},\n\n✨ Just a friendly reminder about your upcoming stay with us! ✨\n\n📅 Check-in Date: ${booking.check_in_date}\n⏰ Time: ${formattedTime}\n\nWe’re excited to welcome you and ensure your stay is comfortable and memorable. If you have any questions or special requests, feel free to reach out to us anytime.\nLooking forward to seeing you soon! 😊`;      
         try {
           await sendWhatsAppMessage(booking.phone, message);
           res.json({ message: 'Reminder sent successfully' });
@@ -971,16 +932,7 @@ app.post('/api/admin/bookings/:id/checkout-notify', authenticateAdmin, async (re
         }
 
         const feedbackUrl = `${process.env.WEB_APP_URL}/feedback?id=${feedbackToken}`;
-        const message = `
-                          Hello ${booking.guest_name}, \n\n
-                          
-                          Just a kind reminder that your check-out is scheduled for today at ${formatTimeTo12Hour(booking.check_out_time)}. We hope you enjoyed your stay with us!\n\n
-                          
-                          🌟 We value your feedback! 🌟  \n
-                          Please take a moment to share your experience: ${feedbackUrl}\n\n
-                          
-                          Thank you for choosing us, and we hope to welcome you again soon!
-                          `;        
+        const message = `Hello ${booking.guest_name},\n\nJust a kind reminder that your check-out is scheduled for today at ${formatTimeTo12Hour(booking.check_out_time)}. We hope you enjoyed your stay with us!\n\n🌟 We value your feedback! 🌟\nPlease take a moment to share your experience: ${feedbackUrl}\n\nThank you for choosing us, and we hope to welcome you again soon!`;       
         try {
           await sendWhatsAppMessage(booking.phone, message);
           
@@ -1036,15 +988,7 @@ cron.schedule('0 0 * * *', () => {
             console.log(`Booking ID ${booking.id} has been cancelled.`);
 
             // Notify user about the cancellation
-            const message = `
-                            Hello ${booking.name},\n\n
-
-                            We regret to inform you that your booking (ID: ${booking.id}) has been automatically cancelled as we did not receive your check-in on ${booking.check_in_date}.\n
-                            If this was unintentional or if you have any questions, please don’t hesitate to reach out to us. We’d be happy to assist you.\n\n
-                            Thank you for considering us, and we hope to welcome you in the future!\n\n
-
-                            Best regards,  
-                            `;
+            const message = `Hello ${booking.name},\n\nWe regret to inform you that your booking (ID: ${booking.id}) has been automatically cancelled as we did not receive your check-in on ${booking.check_in_date}.\nIf this was unintentional or if you have any questions, please don’t hesitate to reach out to us. We’d be happy to assist you.\n\nThank you for considering us, and we hope to welcome you in the future!\n\nBest regards,`;
             try {
               await sendWhatsAppMessage(booking.phone, message);
               console.log(`Notification sent to ${booking.phone} for booking ID ${booking.id}.`);
