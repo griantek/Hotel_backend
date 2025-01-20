@@ -874,7 +874,15 @@ async function checkRoomAvailability(roomType, excludeBookingId) {
     );
   });
 }
-
+// Add new endpoint to get room types
+app.get('/api/room-types', (req, res) => {
+  db.all('SELECT type, price FROM rooms', (err, rooms) => {
+    if (err) {
+      return res.status(500).json({ error: 'Failed to fetch room types' });
+    }
+    res.json(rooms);
+  });
+});
 // Send reminder notification
 app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) => {
   const bookingId = req.params.id;
