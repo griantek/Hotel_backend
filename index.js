@@ -498,7 +498,7 @@ app.patch('/api/bookings/:id', async (req, res) => {
 
               // Create new reminders
               createReminders(bookingId, checkInDate, checkInTime);
-              const modificationMessage = `✨ Your booking has been successfully updated! ✨\n\n📌 Updated Reservation Details:\n🏨 Room Type: ${roomType || booking.room_type}\n🗓️ Check-in: ${checkInDate || booking.check_in_date} at ${formatTimeTo12Hour(checkInTime) || formatTimeTo12Hour(booking.check_in_time)}\n🗓️ Check-out: ${checkOutDate || booking.check_out_date} at ${formatTimeTo12Hour(checkOutTime) || formatTimeTo12Hour(booking.check_out_time)}\n👥 Guests: ${guestCount || booking.guest_count}\n💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n📖 Booking ID: ${bookingId}\n\nWe’ve updated your booking as per your request and can’t wait to host you! If you need further assistance or have any questions, feel free to reach out to us anytime. 😊 Looking forward to welcoming you soon! 🌟`;
+              const modificationMessage = `✨ Your booking has been successfully updated! ✨\n\n📌 Updated Reservation Details:\n🏨 Room Type: ${roomType || booking.room_type}\n🗓️ Check-in: ${checkInDate || booking.check_in_date} at ${formatTimeTo12Hour(checkInTime) || formatTimeTo12Hour(booking.check_in_time)}\n🗓️ Check-out: ${checkOutDate || booking.check_out_date} at ${formatTimeTo12Hour(checkOutTime) || formatTimeTo12Hour(booking.check_out_time)}\n👥 Guests: ${guestCount || booking.guest_count}\n💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n📖 Booking ID: ${bookingId}\n\nWe’ve updated your booking as per your request and can’t wait to host you! If you need further assistance or have any questions, feel free to reach out to us anytime.\nLooking forward to welcoming you soon! 😊`;
               // Send modification notification              
               await sendWhatsAppMessage(booking.phone, modificationMessage);
               res.json({
@@ -645,18 +645,7 @@ cron.schedule('* * * * *', () => {
     }
 
     rows.forEach(async (reminder) => {
-      const message = `
-                      Hello ${reminder.name}, \n\n
-
-                      🌟 Just a friendly reminder about your upcoming stay! 🌟\n\n
-
-                      🏨 Room Type: ${reminder.room_type}  \n
-                      📅 Check-in Date: ${reminder.check_in_date}  \n
-                      ⏰ Check-in Time: ${formatTimeTo12Hour(reminder.check_in_time)}  \n\n
-
-                      We’re excited to welcome you and ensure your stay is nothing short of wonderful. If you have any special requests or questions, please feel free to reach out.\n
-                      See you soon! 😊  
-                      `;
+      const message = `Hello ${reminder.name},\n\n🌟 Just a friendly reminder about your upcoming stay! 🌟\n\n🏨 Room Type: ${reminder.room_type}\n📅 Check-in Date: ${reminder.check_in_date}\n⏰ Check-in Time: ${formatTimeTo12Hour(reminder.check_in_time)}\n\nWe’re excited to welcome you and ensure your stay is nothing short of wonderful. If you have any special requests or questions, please feel free to reach out.\nSee you soon! 😊`;
       await sendWhatsAppMessage(reminder.phone, message);
       console.log('Reminder sent:', message);
       // Delete reminder after sending
