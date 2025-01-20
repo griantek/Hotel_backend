@@ -93,6 +93,15 @@ db.serialize(() => {
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL -- Store hashed passwords
   )`); 
+
+  db.run(`CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    rating INTEGER NOT NULL,
+    feedback TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (booking_id) REFERENCES bookings (id)
+  )`);
 });
 
 //Admin
@@ -1009,6 +1018,30 @@ cron.schedule('0 0 * * *', () => {
       }
     }
   );
+});
+
+// Feedback submission endpoint
+app.post('/api/feedback', async (req, res) => {
+  const { rating, feedback, bookingId } = req.body;
+
+  if (!rating || !bookingId) {
+    return res.status(400).json({ message: 'Rating and booking ID are required' });
+  }
+
+  try {
+    db.run(
+      `INSERT INTO feedback (booking_id, rating, feedback) VALUES (?, ?, ?)`,
+      [bookingId, rating, feedback],
+      function(err) {
+        if (err) {
+          return res.status(500).json({ message: 'Failed to save feedback' });
+        }
+        res.json({ message: 'Feedback submitted successfully' });
+      }
+    );
+  } catch (error) {
+    res.status(500).json({ message: 'Internal server error' });
+  }
 });
 
 const PORT =  4000;
