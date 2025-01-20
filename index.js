@@ -764,73 +764,96 @@ app.delete('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
 app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) => {
   const bookingId = req.params.id;
   const updates = req.body;
-  const allowedFields = [
-    'paid_status', 
-    'verification_status', 
-    'checkin_status',
-    'room_number',
-    'room_type',
-    'status',
-    'guest_count',
-    'notes',
-    'check_in_date',
-    'check_in_time', 
-    'check_out_date',
-    'check_out_time'
-  ];
-
+  
   try {
-    const updateFields = [];
-    const values = [];
+    // First get the current booking and room details
+    db.get(
+      `SELECT b.*, r.price as room_price 
+       FROM bookings b
+       LEFT JOIN rooms r ON r.type = b.room_type
+       WHERE b.id = ?`,
+      [bookingId],
+      async (err, booking) => {
+        if (err || !booking) {
+          return res.status(400).json({ error: 'Booking not found' });
+        }
 
-    // Validate dates if they are being updated
-    if (updates.check_in_date && updates.check_out_date) {
-      const checkInDate = moment(updates.check_in_date);
-      const checkOutDate = moment(updates.check_out_date);
-      
-      if (!checkInDate.isValid() || !checkOutDate.isValid() || checkOutDate.isSameOrBefore(checkInDate)) {
-        return res.status(400).json({ error: 'Invalid date range' });
-      }
-    }
+        // Calculate new total price if dates or room type changes
+        if (updates.room_type || updates.check_in_date || updates.check_out_date) {
+          const checkInDate = moment(updates.check_in_date || booking.check_in_date);
+          const checkOutDate = moment(updates.check_out_date || booking.check_out_date);
+          
+          if (!checkInDate.isValid() || !checkOutDate.isValid() || checkOutDate.isSameOrBefore(checkInDate)) {
+            return res.status(400).json({ error: 'Invalid date range' });
+          }
 
-    Object.entries(updates).forEach(([key, value]) => {
-      if (allowedFields.includes(key) && value !== undefined) {
-        updateFields.push(`${key} = ?`);
-        values.push(value);
-      }
-    });
+          // Get room price
+          const roomType = updates.room_type || booking.room_type;
+          db.get('SELECT price FROM rooms WHERE type = ?', [roomType], async (err, room) => {
+            if (err || !room) {
+              return res.status(400).json({ error: 'Invalid room type' });
+            }
 
-    if (updateFields.length === 0) {
-      return res.status(400).json({ error: 'No valid fields to update' });
-    }
+            const numberOfDays = checkOutDate.diff(checkInDate, 'days');
+            updates.total_price = room.price * numberOfDays;
 
-    values.push(bookingId);
-
-    // Check room availability
-    if (updates.room_type || updates.check_in_date || updates.check_out_date) {
-      const roomAvailable = await checkRoomAvailability(
-        updates.room_type || booking.room_type, 
-        bookingId
-      );
-      if (!roomAvailable) {
-        return res.status(400).json({ error: 'Room not available for selected dates' });
-      }
-    }
-
-    // Add updated_at timestamp
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-
-    db.run(
-      `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
-      values,
-      function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ 
-          message: 'Booking updated successfully',
-          updatedFields: Object.keys(updates)
-        });
+            // Now process the update with new total price
+            await processUpdate(updates);
+          });
+        } else {
+          await processUpdate(updates);
+        }
       }
     );
+
+    async function processUpdate(updates) {
+      const allowedFields = [
+        'paid_status', 
+        'verification_status', 
+        'checkin_status',
+        'room_number',
+        'room_type',
+        'status',
+        'guest_count',
+        'notes',
+        'check_in_date',
+        'check_in_time', 
+        'check_out_date',
+        'check_out_time',
+        'total_price'
+      ];
+
+      const updateFields = [];
+      const values = [];
+
+      Object.entries(updates).forEach(([key, value]) => {
+        if (allowedFields.includes(key) && value !== undefined) {
+          updateFields.push(`${key} = ?`);
+          values.push(value);
+        }
+      });
+
+      if (updateFields.length === 0) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+
+      values.push(bookingId);
+      updateFields.push('updated_at = CURRENT_TIMESTAMP');
+
+      db.run(
+        `UPDATE bookings SET ${updateFields.join(', ')} WHERE id = ?`,
+        values,
+        function(err) {
+          if (err) return res.status(500).json({ error: err.message });
+          res.json({ 
+            message: 'Booking updated successfully',
+            updatedFields: Object.keys(updates),
+            totalPrice: updates.total_price
+          });
+        }
+      );
+    }
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
