@@ -181,7 +181,7 @@ async function sendInitialGreeting(phone, name, hasBookings) {
         interactive: {
             type: "button",
             body: {
-                text: `${greeting} Welcome to Our Hotel. How can I assist you today?`
+                text: `${greeting} Welcome to ${process.env.HOTEL_NAME}. How can I assist you today?`
             },
             action: {
                 buttons: buttons
@@ -249,10 +249,10 @@ async function sendLocation(phone) {
                 to: phone,
                 type: "location",
                 location: {
-                    latitude: "10.0889", // Replace with actual hotel latitude
-                    longitude: "76.3639", // Replace with actual hotel longitude
-                    name: "Hotel Name", // Replace with actual hotel name
-                    address: "Hotel Address, City, State" // Replace with actual hotel address
+                    latitude: `${process.env.HOTEL_LATITUDE}`, // Replace with actual hotel latitude
+                    longitude: `${process.env.HOTEL_LONGITUDE}`, // Replace with actual hotel longitude
+                    name: `${process.env.HOTEL_NAME}`, // Replace with actual hotel name
+                    address: `${process.env.HOTEL_ADDRESS}` // Replace with actual hotel address
                 }
             }
         });
@@ -350,24 +350,6 @@ async function getUserBookings(userId) {
         );
     });
 }
-async function checkRecentBooking(phone) {
-    return new Promise((resolve, reject) => {
-        db.get(
-            `SELECT COUNT(*) as count 
-             FROM bookings b
-             JOIN users u ON b.user_id = u.id
-             WHERE u.phone = ? 
-             AND b.created_at >= datetime('now', '-1 hour')`,
-            [phone],
-            (err, row) => {
-                if (err) reject(err);
-                resolve(row.count > 0);
-            }
-        );
-    });
-}
-
-
 
 async function cancelBooking(userId) {
     // Get the user's bookings
@@ -502,9 +484,9 @@ async function sendContactInfo(phone) {
             type: "button",
             body: {
                 text: "You can reach us through:\n\n" +
-                      "📞 Phone: +1-234-567-8900\n" +
-                      "📧 Email: contact@ourhotel.com\n" +
-                      "📍 Address: 123 Hotel Street, City, Country\n\n" +
+                      `📞 Phone: ${process.env.HOTEL_PHONE}\n` +
+                      `📧 Email: ${process.env.HOTEL_EMAIL}\n `+
+                      `📍 Address: ${process.env.HOTEL_ADDRESS}\n\n` +
                       "Our front desk is available 24/7."
             },
             action: {
