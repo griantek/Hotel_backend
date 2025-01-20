@@ -396,11 +396,11 @@ async function sendBookingDetails(phone, bookings) {
     }
 
     const bookingsList = bookings.map(booking => 
-        `Booking ID: ${booking.id}\n` +
-        `Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_in_time)}\n` +
-        `Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_out_time)}\n` +
-        `Room type: ${booking.room_type}\n` +
-        `Price: $${booking.total_price.toFixed(2)}\n`
+        `🔹 Booking ID: ${booking.id}\n` +
+        `📅 Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_in_time)}\n` +
+        `📅 Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_out_time)}\n` +
+        `🏨 Room Type: ${booking.room_type}\n` +
+        `💵 Price: $${booking.total_price.toFixed(2)}\n`
     ).join('\n');
 
     await sendWhatsAppMessage(phone, {
