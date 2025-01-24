@@ -1015,6 +1015,29 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
+// Add this endpoint in index.js
+app.get('/api/admin/feedback', authenticateAdmin, (req, res) => {
+  db.all(
+    `SELECT 
+      f.id,
+      f.rating,
+      f.feedback as comment,
+      f.created_at,
+      u.name as user_name,
+      u.phone
+     FROM feedback f
+     JOIN bookings b ON f.booking_id = b.id
+     JOIN users u ON b.user_id = u.id
+     ORDER BY f.created_at DESC`,
+    (err, feedback) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to fetch feedback' });
+      }
+      res.json(feedback);
+    }
+  );
+});
+
 const PORT =  4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
