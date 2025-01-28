@@ -239,6 +239,12 @@ async function sendLocation(phone) {
     try {
         const latitude = process.env.HOTEL_LATITUDE;
         const longitude = process.env.HOTEL_LONGITUDE;
+
+        // Validate environment variables
+        if (!latitude || !longitude) {
+            throw new Error("Latitude or Longitude is not defined in environment variables.");
+        }
+
         const response = await axios({
             method: "POST",
             url: `${WHATSAPP_API_URL}`,
@@ -251,16 +257,16 @@ async function sendLocation(phone) {
                 to: phone,
                 type: "location",
                 location: {
-                    latitude: latitude, // Replace with actual hotel latitude
-                    longitude: longitude, // Replace with actual hotel longitude
-                    name: `${process.env.HOTEL_NAME}`, // Replace with actual hotel name
-                    address: `${process.env.HOTEL_ADDRESS}` // Replace with actual hotel address
+                    latitude: latitude,
+                    longitude: longitude,
+                    name: `${process.env.HOTEL_NAME}`, 
+                    address: `${process.env.HOTEL_ADDRESS}` 
                 }
             }
         });
         return response.data;
     } catch (error) {
-        console.error("Error sending location:", error);
+        console.error("Error sending location:", error.response?.data || error.message);
         throw new Error("Failed to send location");
     }
 }
