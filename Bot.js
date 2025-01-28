@@ -249,8 +249,8 @@ async function sendLocation(phone) {
                 to: phone,
                 type: "location",
                 location: {
-                    latitude: `${process.env.HOTEL_LATITUDE}`, // Replace with actual hotel latitude
-                    longitude: `${process.env.HOTEL_LONGITUDE}`, // Replace with actual hotel longitude
+                    latitude: process.env.HOTEL_LATITUDE, // Replace with actual hotel latitude
+                    longitude: process.env.HOTEL_LONGITUDE, // Replace with actual hotel longitude
                     name: `${process.env.HOTEL_NAME}`, // Replace with actual hotel name
                     address: `${process.env.HOTEL_ADDRESS}` // Replace with actual hotel address
                 }
