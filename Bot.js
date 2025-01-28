@@ -237,6 +237,8 @@ async function handleButtonResponse(phone, name, interactive, user) {
 // Send location
 async function sendLocation(phone) {
     try {
+        const latitude = process.env.HOTEL_LATITUDE;
+        const longitude = process.env.HOTEL_LONGITUDE;
         const response = await axios({
             method: "POST",
             url: `${WHATSAPP_API_URL}`,
@@ -249,8 +251,8 @@ async function sendLocation(phone) {
                 to: phone,
                 type: "location",
                 location: {
-                    latitude: process.env.HOTEL_LATITUDE, // Replace with actual hotel latitude
-                    longitude: process.env.HOTEL_LONGITUDE, // Replace with actual hotel longitude
+                    latitude: latitude, // Replace with actual hotel latitude
+                    longitude: longitude, // Replace with actual hotel longitude
                     name: `${process.env.HOTEL_NAME}`, // Replace with actual hotel name
                     address: `${process.env.HOTEL_ADDRESS}` // Replace with actual hotel address
                 }
