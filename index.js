@@ -14,6 +14,7 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const db = new sqlite3.Database('hotel.db');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
@@ -28,6 +29,8 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+
 // time format
 function formatTimeTo12Hour(time) {
   const [hour, minute] = time.split(':');
