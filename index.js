@@ -936,13 +936,31 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
 });
 
 // Add new endpoint to get room types
+// Update room-types endpoint to include photos
 app.get('/api/room-types', (req, res) => {
-  db.all('SELECT type, price FROM rooms', (err, rooms) => {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to fetch room types' });
-    }
-    res.json(rooms);
-  });
+  db.all(`
+    SELECT 
+      r.*,
+      json_group_array(
+        json_object(
+          'id', rp.id,
+          'photo_url', rp.photo_url,
+          'is_primary', rp.is_primary
+        )
+      ) as photos
+    FROM rooms r
+    LEFT JOIN room_photos rp ON r.id = r.id
+    GROUP BY r.id`, 
+    (err, rooms) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to fetch room types' });
+      }
+      rooms = rooms.map(room => ({
+        ...room,
+        photos: JSON.parse(room.photos)
+      }));
+      res.json(rooms);
+    });
 });
 // Send reminder notification
 app.post('/api/admin/bookings/:id/notify', authenticateAdmin, async (req, res) => {
