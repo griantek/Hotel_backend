@@ -11,11 +11,23 @@ app.use(express.json());
 app.use(cors());
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-
+const multer = require('multer');
+const path = require('path');
 const db = new sqlite3.Database('hotel.db');
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
+// Configure multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/rooms/')
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`)
+  }
+});
+
+const upload = multer({ storage });
 // time format
 function formatTimeTo12Hour(time) {
   const [hour, minute] = time.split(':');
@@ -102,6 +114,15 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (booking_id) REFERENCES bookings (id)
   )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS room_photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    photo_url TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES rooms (id)
+)`);
 });
 
 //Admin
@@ -165,68 +186,123 @@ app.get('/admin/bookings', authenticateAdmin, (req, res) => {
 //Manage rooms
 // Fetch all rooms
 app.get('/admin/rooms', authenticateAdmin, (req, res) => {
-  db.all('SELECT * FROM rooms', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to fetch rooms' });
-    }
-    res.json(rows);
-  });
-});
-// Add a new room
-app.post('/admin/rooms', authenticateAdmin, (req, res) => {
-  const { type, price, availability } = req.body;
-
-  if (!type || price === undefined || availability === undefined) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  db.run(
-    `INSERT INTO rooms (type, price, availability) VALUES (?, ?, ?)`,
-    [type, price, availability],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to add room type' });
-      }
-      res.status(201).json({ message: 'Room type added successfully', id: this.lastID });
+  db.all(
+    `SELECT 
+      r.*,
+      json_group_array(
+        json_object(
+          'id', rp.id,
+          'photo_url', rp.photo_url,
+          'is_primary', rp.is_primary
+        )
+      ) as photos
+     FROM rooms r
+     LEFT JOIN room_photos rp ON r.id = rp.room_id
+     GROUP BY r.id`,
+    (err, rooms) => {
+      if (err) return res.status(500).json({ error: err.message });
+      rooms = rooms.map(room => ({
+        ...room,
+        photos: JSON.parse(room.photos)
+      }));
+      res.json(rooms);
     }
   );
 });
+// Add a new room
+// Add/Update room endpoint
+app.post('/admin/rooms', authenticateAdmin, upload.array('photos', 5), async (req, res) => {
+  const { type, price, availability } = req.body;
+  
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+    try {
+      db.run(
+        `INSERT INTO rooms (type, price, availability) VALUES (?, ?, ?)`,
+        [type, price, availability],
+        function(err) {
+          if (err) throw err;
+          
+          const roomId = this.lastID;
+          
+          // Insert photos
+          if (req.files) {
+            req.files.forEach((file, index) => {
+              db.run(
+                `INSERT INTO room_photos (room_id, photo_url, is_primary) 
+                 VALUES (?, ?, ?)`,
+                [roomId, `/uploads/rooms/${file.filename}`, index === 0]
+              );
+            });
+          }
+
+          db.run('COMMIT');
+          res.status(201).json({ message: 'Room added successfully', id: roomId });
+        }
+      );
+    } catch (err) {
+      db.run('ROLLBACK');
+      res.status(500).json({ error: err.message });
+    }
+  });
+});
 // Update a room type
-app.patch('/admin/rooms/:id', authenticateAdmin, (req, res) => {
+app.patch('/admin/rooms/:id', authenticateAdmin, upload.array('photos', 5), (req, res) => {
   const { id } = req.params;
   const { type, price, availability } = req.body;
+  const photos = req.files;
 
-  if (type === undefined && price === undefined && availability === undefined) {
-    return res.status(400).json({ error: 'At least one field is required for update' });
-  }
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
 
-  const fieldsToUpdate = [];
-  const values = [];
+    try {
+      // Update room details
+      if (type || price || availability) {
+        const fieldsToUpdate = [];
+        const values = [];
 
-  if (type !== undefined) {
-    fieldsToUpdate.push('type = ?');
-    values.push(type);
-  }
-  if (price !== undefined) {
-    fieldsToUpdate.push('price = ?');
-    values.push(price);
-  }
-  if (availability !== undefined) {
-    fieldsToUpdate.push('availability = ?');
-    values.push(availability);
-  }
-  values.push(id);
+        if (type) {
+          fieldsToUpdate.push('type = ?');
+          values.push(type);
+        }
+        if (price) {
+          fieldsToUpdate.push('price = ?');
+          values.push(price);
+        }
+        if (availability) {
+          fieldsToUpdate.push('availability = ?');
+          values.push(availability);
+        }
+        values.push(id);
 
-  const query = `UPDATE rooms SET ${fieldsToUpdate.join(', ')} WHERE id = ?`;
+        db.run(
+          `UPDATE rooms SET ${fieldsToUpdate.join(', ')} WHERE id = ?`,
+          values
+        );
+      }
+      // Handle photo uploads
+      if (photos && photos.length > 0) {
+        // Delete existing photos if needed
+        if (req.body.replacePhotos === 'true') {
+          db.run('DELETE FROM room_photos WHERE room_id = ?', [id]);
+        }
 
-  db.run(query, values, function (err) {
-    if (err) {
-      return res.status(500).json({ error: 'Failed to update room type' });
+        // Insert new photos
+        photos.forEach((photo, index) => {
+          db.run(
+            `INSERT INTO room_photos (room_id, photo_url, is_primary) 
+             VALUES (?, ?, ?)`,
+            [id, `/uploads/rooms/${photo.filename}`, index === 0]
+          );
+        });
+      }
+
+      db.run('COMMIT');
+      res.json({ message: 'Room updated successfully' });
+    } catch (err) {
+      db.run('ROLLBACK');
+      res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Room type not found' });
-    }
-    res.json({ message: 'Room type updated successfully' });
   });
 });
 
