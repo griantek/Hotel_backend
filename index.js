@@ -1016,7 +1016,7 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // Add this endpoint in index.js
-app.get('/api/admin/feedback', authenticateAdmin, (req, res) => {
+app.get('/admin/feedback', authenticateAdmin, (req, res) => {
   db.all(
     `SELECT 
       f.id,
