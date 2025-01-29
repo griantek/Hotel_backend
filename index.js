@@ -937,29 +937,37 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
 
 // Add new endpoint to get room types
 // Update room-types endpoint to include photos
+// Fix the room-types endpoint
 app.get('/api/room-types', (req, res) => {
   db.all(`
     SELECT 
       r.*,
       json_group_array(
-        json_object(
-          'id', rp.id,
-          'photo_url', rp.photo_url,
-          'is_primary', rp.is_primary
-        )
+        CASE WHEN rp.id IS NOT NULL
+          THEN json_object(
+            'id', rp.id,
+            'photo_url', rp.photo_url,
+            'is_primary', rp.is_primary
+          )
+          ELSE NULL
+        END
       ) as photos
     FROM rooms r
-    LEFT JOIN room_photos rp ON r.id = r.id
+    LEFT JOIN room_photos rp ON r.id = rp.room_id
     GROUP BY r.id`, 
     (err, rooms) => {
       if (err) {
+        console.error('Database error:', err);
         return res.status(500).json({ error: 'Failed to fetch room types' });
       }
-      rooms = rooms.map(room => ({
+      
+      // Format the response
+      const formattedRooms = rooms.map(room => ({
         ...room,
-        photos: JSON.parse(room.photos)
+        photos: JSON.parse(room.photos).filter(photo => photo !== null)
       }));
-      res.json(rooms);
+      
+      res.json(formattedRooms);
     });
 });
 // Send reminder notification
