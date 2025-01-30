@@ -581,7 +581,7 @@ async function sendBookingDetails(phone, bookings) {
         `📅 Check-in: ${new Date(booking.check_in_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_in_time)}\n` +
         `📅 Check-out: ${new Date(booking.check_out_date).toLocaleDateString()} at ${formatTimeTo12Hour(booking.check_out_time)}\n` +
         `🏨 Room Type: ${booking.room_type}\n` +
-        `👥 Guests: ${booking.number_of_guests}\n` + 
+        `👥 Guests: ${booking.guest_count}\n` + 
         `💵 Price: $${booking.total_price.toFixed(2)}\n`
     ).join('\n');
 
@@ -589,7 +589,7 @@ async function sendBookingDetails(phone, bookings) {
         interactive: {
             type: "button",
             body: {
-                text: `Hey ${bookings.name}, Here are your bookings:\n\n${bookingsList}`
+                text: `Hey ${booking.name}, Here are your bookings:\n\n${bookingsList}`
             },
             action: {
                 buttons: [
