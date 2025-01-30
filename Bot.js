@@ -156,19 +156,28 @@ app.post('/spa', async (req, res) => {
 // Handle incoming messages
 async function handleIncomingMessage(phone, message, name) {
     try {
-        // Check if user exists and has bookings
         const user = await getUserByPhone(phone);
         const hasBookings = user ? await checkUserBookings(user.id) : false;
         userName = user?.name || name;
 
         if (message.type === 'text' && message.text.body.toLowerCase() === 'hi') {
-            // Initial greeting with buttons
-            await sendInitialGreeting(phone, userName , hasBookings);
+            await sendInitialGreeting(phone, userName, hasBookings);
         } else if (message.type === 'interactive') {
+            // Log the interactive message structure for debugging
+            console.log('Interactive message received:', JSON.stringify(message.interactive));
+            
+            if (!message.interactive) {
+                throw new Error('Invalid interactive message format');
+            }
+            
             await handleButtonResponse(phone, userName, message.interactive, user);
         }
     } catch (error) {
         console.error('Error handling message:', error);
+        // Send fallback message to user
+        await sendWhatsAppTextMessage(phone, 
+            'Sorry, I encountered an error processing your request. Please try again or type "hi" to start over.'
+        );
     }
 }
 
@@ -300,7 +309,14 @@ async function sendServicesList(phone) {
                         
 // Handle button responses
 async function handleButtonResponse(phone, name, interactive, user) {
-    const buttonId = interactive.button_reply.id || interactive.list_reply?.id;
+    // Check for both button replies and list replies
+    const buttonId = interactive.button_reply?.id || interactive.list_reply?.id;
+    
+    if (!buttonId) {
+        console.error('No valid button or list ID found in response:', interactive);
+        await sendWhatsAppTextMessage(phone, 'Sorry, there was an error processing your request. Please try again.');
+        return;
+    }
 
     switch (buttonId) {
         case 'book_room':
