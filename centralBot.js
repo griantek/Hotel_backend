@@ -6,8 +6,8 @@ const app = express();
 app.use(bodyParser.json());
 
 // Import bot handlers
-const adminBot = require('./adminBot');
-const customerBot = require('./customerBot');
+const adminBot = require('./adminBot.js');
+const customerBot = require('./customerBot.js');
 
 // Webhook verification endpoint
 app.get('/spa', (req, res) => {
