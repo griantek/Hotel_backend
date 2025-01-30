@@ -356,25 +356,6 @@ async function handleButtonResponse(phone, name, interactive, user) {
         case 'spa':
             await sendSpaInfo(phone);
             break;
-        case 'our_services':
-            await sendServicesList(phone);
-            break;
-    
-        case 'rooms_gallery':
-            await sendRoomGallery(phone);
-            break;
-    
-        case 'check_availability':
-            await initiateAvailabilityCheck(phone);
-            break;
-    
-        case 'dining':
-            await sendDiningInfo(phone);
-            break;
-    
-        case 'spa':
-            await sendSpaInfo(phone);
-            break;    
             
         default:
             await sendWhatsAppTextMessage(phone, 'I apologize, but I didn\'t understand that. Please try again.');
