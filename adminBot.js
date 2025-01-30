@@ -354,7 +354,7 @@ async function sendDashboardSummary(phone) {
         `Unpaid Bookings: ${summary.unpaid_bookings}\n` +
         `New Feedback: ${summary.new_feedback}\n` +
         `Today's Revenue: $${summary.today_revenue || 0}\n\n` +
-        `For detailed reports, visit: ${process.env.WEB_APP_URL}/dashboard`;
+        `For detailed reports, visit: ${process.env.ADMIN_DASHBOARD_URL}/dashboard`;
 
     await sendWhatsAppTextMessage(phone, message);
 }
@@ -376,7 +376,7 @@ async function sendUrgentActions(phone) {
 
     await sendWhatsAppTextMessage(phone, 
         `*Urgent Actions Required*:\n\n${actionsList}\n\n` +
-        `Take action at: ${process.env.WEB_APP_URL}/urgent-actions`
+        `Take action at: ${process.env.ADMIN_DASHBOARD_URL}/urgent-actions`
     );
 }
 
@@ -389,7 +389,7 @@ async function sendDailyRevenue(phone) {
         `Average Booking Value: $${Math.round(revenue.average_booking_value || 0)}\n` +
         `Collected Revenue: $${revenue.collected_revenue || 0}\n` +
         `Pending Revenue: $${revenue.pending_revenue || 0}\n\n` +
-        `View detailed reports at: ${process.env.WEB_APP_URL}/revenue`;
+        `View detailed reports at: ${process.env.ADMIN_DASHBOARD_URL}/revenue`;
 
     await sendWhatsAppTextMessage(phone, message);
 }
