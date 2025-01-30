@@ -320,10 +320,25 @@ async function handleButtonResponse(phone, name, interactive, user) {
 
     switch (buttonId) {
         case 'book_room':
-            const bookingLink = await generateBookingLink(phone, name);
-            await sendWhatsAppTextMessage(phone, `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`);
-            // Schedule follow-up if no booking is made
-            scheduleBookingFollowUp(phone);
+            const hasBookings = user ? await checkUserBookings(user.id) : false;
+    
+            if (hasBookings) {
+                await sendWhatsAppTextMessage(
+                    phone, 
+                    "You have an existing booking. Would you like to modify booking?"
+                );
+                await sendWhatsAppButtons(phone, "Select an option:", [
+                    { id: "modify_booking", title: "Modify Existing" }
+                ]);
+            } else {
+                const bookingLink = await generateBookingLink(phone, name);
+                await sendWhatsAppTextMessage(
+                    phone, 
+                    `Click the link below to make your reservation. Our online booking system will guide you through the process: ${bookingLink}`
+                );
+                // Schedule follow-up if no booking is made
+                scheduleBookingFollowUp(phone);
+            }
             break;
 
         case 'view_bookings':
@@ -712,7 +727,7 @@ async function sendRoomGallery(phone) {
 
             if (photos.length > 0) {
                 await sendWhatsAppMedia(phone, "image", photos[0], 
-                    `*${room.type}*\nPrice: $${room.price}/night\nAvailable rooms: ${room.availability}`
+                    `*${room.type}*\nPrice: $${room.price}/night\nTotal rooms: ${room.availability}`
                 );
             }
         }
@@ -791,25 +806,41 @@ async function sendSpaInfo(phone) {
 
 async function initiateAvailabilityCheck(phone) {
     try {
-        // Get room types and availability
+        const today = moment().format("YYYY-MM-DD"); // Get the current date
+
+        // Get the current availability by considering existing bookings
         const rooms = await new Promise((resolve, reject) => {
-            db.all('SELECT type, availability, price FROM rooms WHERE availability > 0', [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
+            db.all(
+                `SELECT r.type, r.availability, r.price, 
+                        IFNULL(
+                            (SELECT COUNT(*) FROM bookings b 
+                             WHERE b.room_type = r.type 
+                             AND b.status = 'confirmed' 
+                             AND b.check_in_date <= ? 
+                             AND b.check_out_date > ?), 
+                            0
+                        ) as booked_rooms
+                 FROM rooms r`,
+                [today, today],
+                (err, rows) => {
+                    if (err) reject(err);
+                    resolve(rows);
+                }
+            );
         });
 
-        const availabilityText = rooms.map(room => 
-            `*${room.type}*\n` +
-            `Available: ${room.availability} rooms\n` +
-            `Price: $${room.price}/night\n`
-        ).join('\n');
+        // Format the availability message
+        const availabilityText = rooms.map(room => {
+            const remainingRooms = Math.max(room.availability - room.booked_rooms, 0);
+            return `*${room.type}*\nAvailable: ${remainingRooms} rooms\nPrice: $${room.price}/night\n`;
+        }).join("\n");
 
+        // Send availability details
         await sendWhatsAppMessage(phone, {
             interactive: {
                 type: "button",
                 body: {
-                    text: `Current Availability:\n\n${availabilityText}\n\nWould you like to make a booking?`
+                    text: `📅 *Current Availability (${today})*:\n\n${availabilityText}\nWould you like to make a booking?`
                 },
                 action: {
                     buttons: [{
@@ -823,7 +854,7 @@ async function initiateAvailabilityCheck(phone) {
             }
         });
     } catch (error) {
-        console.error('Error checking availability:', error);
+        console.error("Error checking availability:", error);
         throw error;
     }
 }
