@@ -7,6 +7,7 @@ const schedule = require('node-schedule');
 require('dotenv').config();
 const app = express();
 app.use(bodyParser.json());
+const moment = require('moment');
 
 // Database connection
 const db = new sqlite3.Database('hotel.db');
