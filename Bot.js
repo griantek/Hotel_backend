@@ -686,20 +686,30 @@ async function sendFollowUpMessage(phone) {
 // Add after existing helper functions
 async function sendRoomGallery(phone) {
     try {
+        const BASE_URL = process.env.BASE_URL ; // Default base URL
+        
         // Send welcome message
         await sendWhatsAppTextMessage(phone, "Here are our luxurious room types:");
         
         // Get room types from database
         const rooms = await new Promise((resolve, reject) => {
-            db.all('SELECT r.*, GROUP_CONCAT(rp.photo_url) as photos FROM rooms r LEFT JOIN room_photos rp ON r.id = rp.room_id GROUP BY r.id', [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
+            db.all(
+                'SELECT r.*, GROUP_CONCAT(rp.photo_url) as photos FROM rooms r LEFT JOIN room_photos rp ON r.id = rp.room_id GROUP BY r.id', 
+                [], 
+                (err, rows) => {
+                    if (err) reject(err);
+                    resolve(rows);
+                }
+            );
         });
 
         // Send each room type with photos
         for (const room of rooms) {
-            const photos = room.photos ? room.photos.split(',') : [];
+            let photos = room.photos ? room.photos.split(',') : [];
+            
+            // Convert relative paths to public URLs
+            photos = photos.map(photo => `${BASE_URL}${photo}`);
+
             if (photos.length > 0) {
                 await sendWhatsAppMedia(phone, "image", photos[0], 
                     `*${room.type}*\nPrice: $${room.price}/night\nAvailable rooms: ${room.availability}`
