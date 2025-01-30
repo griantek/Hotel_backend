@@ -1,4 +1,3 @@
-// Enhanced AdminBot Implementation
 const express = require('express');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
@@ -146,11 +145,6 @@ async function sendAdminMenu(phone) {
                                 id: "today_checkouts",
                                 title: "Today's Check-outs",
                                 description: "View today's expected check-outs"
-                            },
-                            {
-                                id: "pending_verifications",
-                                title: "Pending Verifications",
-                                description: "View bookings pending verification"
                             }
                         ]
                     },
@@ -203,7 +197,6 @@ async function getDashboardSummary() {
             SELECT 
                 (SELECT COUNT(*) FROM bookings WHERE check_in_date = ?) as today_checkins,
                 (SELECT COUNT(*) FROM bookings WHERE check_out_date = ?) as today_checkouts,
-                (SELECT COUNT(*) FROM bookings WHERE verification_status = 'pending') as pending_verifications,
                 (SELECT COUNT(*) FROM bookings WHERE paid_status = 'unpaid') as unpaid_bookings,
                 (SELECT COUNT(*) FROM feedback WHERE created_at >= datetime('now', '-24 hours')) as new_feedback,
                 (SELECT SUM(total_price) FROM bookings WHERE check_in_date = ?) as today_revenue
@@ -302,10 +295,6 @@ async function handleButtonResponse(phone, interactive) {
                 await sendTodayCheckouts(phone);
                 break;
 
-            case 'pending_verifications':
-                await sendPendingVerifications(phone);
-                break;
-
             case 'room_status':
                 await sendRoomStatus(phone);
                 break;
@@ -345,7 +334,6 @@ async function sendDashboardSummary(phone) {
         `📊 *Dashboard Summary*\n\n` +
         `Today's Check-ins: ${summary.today_checkins}\n` +
         `Today's Check-outs: ${summary.today_checkouts}\n` +
-        `Pending Verifications: ${summary.pending_verifications}\n` +
         `Unpaid Bookings: ${summary.unpaid_bookings}\n` +
         `New Feedback: ${summary.new_feedback}\n` +
         `Today's Revenue: $${summary.today_revenue || 0}\n\n` +
