@@ -71,13 +71,7 @@ async function sendWhatsAppTextMessage(to, text) {
 // Handle incoming admin messages
 async function handleIncomingMessage(phone, message) {
     try {
-        // Verify if the user is an admin
-        const isAdmin = await verifyAdmin(phone);
-        if (!isAdmin) {
-            await sendWhatsAppTextMessage(phone, 'Unauthorized access. This system is for admin use only.');
-            return;
-        }
-
+        
         if (message.type === 'text' && message.text.body.toLowerCase() === 'hi') {
             await sendAdminMenu(phone);
         } else if (message.type === 'interactive') {
@@ -91,15 +85,7 @@ async function handleIncomingMessage(phone, message) {
     }
 }
 
-// Verify admin status
-async function verifyAdmin(phone) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT * FROM admins WHERE phone = ?', [phone], (err, row) => {
-            if (err) reject(err);
-            resolve(!!row);
-        });
-    });
-}
+
 
 // Send admin menu with enhanced options
 async function sendAdminMenu(phone) {
