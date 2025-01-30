@@ -12,8 +12,8 @@ const moment = require('moment');
 const db = new sqlite3.Database('hotel.db');
 
 // WhatsApp API configuration
-const WHATSAPP_API_URL = `${process.env.WHATSAPP_API_URL}`;
-const WHATSAPP_ACCESS_TOKEN = `${process.env.WHATSAPP_ACCESS_TOKEN}`;
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
 // Helper function to send WhatsApp messages
 async function sendWhatsAppMessage(to, messageData) {
