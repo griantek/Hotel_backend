@@ -93,7 +93,7 @@ async function handleIncomingMessage(phone, message) {
 
 // Verify admin status
 async function verifyAdmin(phone) {
-    return phone === process.env.ADMIN_PHONE;
+    return phone === process.env.ADMIN;
 }
 
 // Send admin menu with enhanced options
