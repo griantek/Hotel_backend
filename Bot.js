@@ -356,7 +356,7 @@ async function handleButtonResponse(phone, name, interactive, user) {
 
         case 'view_bookings':
             const bookings = await getUserBookings(user.id);
-            await sendBookingDetails(phone, bookings);
+            await sendBookingDetails(phone, name, bookings);
             break;
 
         case 'modify_booking':
@@ -554,7 +554,7 @@ async function cancelBooking(userId) {
 // Message sending functions
 
 
-async function sendBookingDetails(phone, bookings) {
+async function sendBookingDetails(phone, name ,bookings) {
     if (!bookings.length) {
         await sendWhatsAppMessage(phone, {
             interactive: {
@@ -589,7 +589,7 @@ async function sendBookingDetails(phone, bookings) {
         interactive: {
             type: "button",
             body: {
-                text: `Hey ${booking.name}, Here are your bookings:\n\n${bookingsList}`
+                text: `Hey ${name}, Here are your bookings:\n\n${bookingsList}`
             },
             action: {
                 buttons: [
