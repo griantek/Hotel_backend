@@ -324,13 +324,25 @@ async function handleButtonResponse(phone, name, interactive, user) {
             const hasBookings = user ? await checkUserBookings(user.id) : false;
     
             if (hasBookings) {
-                await sendWhatsAppTextMessage(
-                    phone, 
-                    "You have an existing booking. Would you like to modify booking?"
-                );
-                await sendWhatsAppButtons(phone, "Select an option:", [
-                    { id: "modify_booking", title: "Modify Existing" }
-                ]);
+                await sendWhatsAppMessage(phone, {
+                    interactive: {
+                        type: "button",
+                        body: {
+                            text: "You have an existing booking. Would you like to modify your booking?"
+                        },
+                        action: {
+                            buttons: [
+                                {
+                                    type: "reply",
+                                    reply: {
+                                        id: "modify_booking",
+                                        title: "Modify Existing"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                });
             } else {
                 const bookingLink = await generateBookingLink(phone, name);
                 await sendWhatsAppTextMessage(
