@@ -47,6 +47,36 @@ async function sendWhatsAppMessage(to, messageData) {
         throw error;
     }
 }
+
+// Add new helper functions for media messages
+async function sendWhatsAppMedia(to, mediaType, url, caption) {
+    try {
+        const response = await axios.post(
+            `${WHATSAPP_API_URL}`,
+            {
+                messaging_product: "whatsapp",
+                recipient_type: "individual",
+                to: to,
+                type: mediaType,
+                [mediaType]: {
+                    link: url,
+                    caption: caption || ""
+                }
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error sending media:', error);
+        throw error;
+    }
+}
+
 async function sendWhatsAppTextMessage(to, text) {
     try {
         const response = await axios.post(
@@ -144,6 +174,11 @@ async function handleIncomingMessage(phone, message, name) {
 
 // Send initial greeting with appropriate buttons
 async function sendInitialGreeting(phone, name, hasBookings) {
+    // First send welcome image
+    await sendWhatsAppMedia(phone, "image", 
+        `${process.env.HOTEL_WELCOME_IMAGE_URL}`, 
+        `Welcome to ${process.env.HOTEL_NAME}`
+    );
     const greeting = name ? `Hello ${name}!` : 'Hello!';
     const buttons = hasBookings ? [
         {
@@ -151,6 +186,13 @@ async function sendInitialGreeting(phone, name, hasBookings) {
             "reply": {
                 "id": "view_bookings",
                 "title": "View Your Bookings"
+            }
+        },
+        {
+            "type": "reply",
+            "reply": {
+                "id": "our_services",
+                "title": "Our Services"
             }
         },
         {
@@ -166,6 +208,13 @@ async function sendInitialGreeting(phone, name, hasBookings) {
             "reply": {
                 "id": "book_room",
                 "title": "Book a Room"
+            }
+        },
+        {
+            "type": "reply",
+            "reply": {
+                "id": "our_services",
+                "title": "Our Services"
             }
         },
         {
@@ -190,9 +239,68 @@ async function sendInitialGreeting(phone, name, hasBookings) {
     });
 }
 
+// Send list message for services
+async function sendServicesList(phone) {
+    try {
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Our Services"
+                },
+                body: {
+                    text: "Explore our premium services and amenities"
+                },
+                footer: {
+                    text: "Select a service to learn more"
+                },
+                action: {
+                    button: "View Services",
+                    sections: [
+                        {
+                            title: "Accommodation",
+                            rows: [
+                                {
+                                    id: "rooms_gallery",
+                                    title: "Room Types",
+                                    description: "View our luxurious rooms"
+                                },
+                                {
+                                    id: "check_availability",
+                                    title: "Check Availability",
+                                    description: "Check room availability & prices"
+                                }
+                            ]
+                        },
+                        {
+                            title: "Amenities",
+                            rows: [
+                                {
+                                    id: "dining",
+                                    title: "Dining",
+                                    description: "Restaurant & room service info"
+                                },
+                                {
+                                    id: "spa",
+                                    title: "Spa & Wellness",
+                                    description: "Relaxation & fitness facilities"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending services list:', error);
+        throw error;
+    }
+}
+                        
 // Handle button responses
 async function handleButtonResponse(phone, name, interactive, user) {
-    const buttonId = interactive.button_reply.id;
+    const buttonId = interactive.button_reply.id || interactive.list_reply?.id;
 
     switch (buttonId) {
         case 'book_room':
@@ -228,6 +336,46 @@ async function handleButtonResponse(phone, name, interactive, user) {
         case 'location':
             await sendLocation(phone);
             break;
+
+        case 'our_services':
+            await sendServicesList(phone);
+            break;
+
+        case 'rooms_gallery':
+            await sendRoomGallery(phone);
+            break;
+
+        case 'check_availability':
+            await initiateAvailabilityCheck(phone);
+            break;
+
+        case 'dining':
+            await sendDiningInfo(phone);
+            break;
+
+        case 'spa':
+            await sendSpaInfo(phone);
+            break;
+        case 'our_services':
+            await sendServicesList(phone);
+            break;
+    
+        case 'rooms_gallery':
+            await sendRoomGallery(phone);
+            break;
+    
+        case 'check_availability':
+            await initiateAvailabilityCheck(phone);
+            break;
+    
+        case 'dining':
+            await sendDiningInfo(phone);
+            break;
+    
+        case 'spa':
+            await sendSpaInfo(phone);
+            break;    
+            
         default:
             await sendWhatsAppTextMessage(phone, 'I apologize, but I didn\'t understand that. Please try again.');
             break;
@@ -536,6 +684,141 @@ async function sendFollowUpMessage(phone) {
             }
         }
     });
+}
+
+// Add after existing helper functions
+async function sendRoomGallery(phone) {
+    try {
+        // Send welcome message
+        await sendWhatsAppTextMessage(phone, "Here are our luxurious room types:");
+        
+        // Get room types from database
+        const rooms = await new Promise((resolve, reject) => {
+            db.all('SELECT r.*, GROUP_CONCAT(rp.photo_url) as photos FROM rooms r LEFT JOIN room_photos rp ON r.id = rp.room_id GROUP BY r.id', [], (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            });
+        });
+
+        // Send each room type with photos
+        for (const room of rooms) {
+            const photos = room.photos ? room.photos.split(',') : [];
+            if (photos.length > 0) {
+                await sendWhatsAppMedia(phone, "image", photos[0], 
+                    `*${room.type}*\nPrice: $${room.price}/night\nAvailable rooms: ${room.availability}`
+                );
+            }
+        }
+
+        // Send booking prompt
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "button",
+                body: {
+                    text: "Would you like to book a room or check availability?"
+                },
+                action: {
+                    buttons: [
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "book_room",
+                                title: "Book Now"
+                            }
+                        },
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "check_availability",
+                                title: "Check Availability"
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending room gallery:', error);
+        throw error;
+    }
+}
+
+async function sendDiningInfo(phone) {
+    // First send restaurant image
+    await sendWhatsAppMedia(phone, "image", 
+        `${process.env.HOTEL_RESTAURANT_IMAGE}`,
+        "Our Fine Dining Restaurant"
+    );
+
+    // Send dining info message
+    await sendWhatsAppTextMessage(phone, 
+        "*🍽️ Dining Services*\n\n" +
+        "�restaurants Restaurant Hours:\n" +
+        "Breakfast: 6:30 AM - 10:30 AM\n" +
+        "Lunch: 12:00 PM - 3:00 PM\n" +
+        "Dinner: 6:30 PM - 11:00 PM\n\n" +
+        "🛎️ Room Service Available 24/7\n\n" +
+        "For reservations or special dietary requirements, please contact us."
+    );
+}
+
+async function sendSpaInfo(phone) {
+    // Send spa image
+    await sendWhatsAppMedia(phone, "image", 
+        `${process.env.HOTEL_SPA_IMAGE}`,
+        "Rejuvenate at Our Spa"
+    );
+
+    // Send spa services info
+    await sendWhatsAppTextMessage(phone,
+        "*✨ Spa & Wellness*\n\n" +
+        "🧖‍♀️ Services:\n" +
+        "- Therapeutic Massages\n" +
+        "- Facial Treatments\n" +
+        "- Body Wraps\n" +
+        "- Aromatherapy\n\n" +
+        "⏰ Hours: 9:00 AM - 9:00 PM\n\n" +
+        "For appointments, please contact our spa reception."
+    );
+}
+
+async function initiateAvailabilityCheck(phone) {
+    try {
+        // Get room types and availability
+        const rooms = await new Promise((resolve, reject) => {
+            db.all('SELECT type, availability, price FROM rooms WHERE availability > 0', [], (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            });
+        });
+
+        const availabilityText = rooms.map(room => 
+            `*${room.type}*\n` +
+            `Available: ${room.availability} rooms\n` +
+            `Price: $${room.price}/night\n`
+        ).join('\n');
+
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "button",
+                body: {
+                    text: `Current Availability:\n\n${availabilityText}\n\nWould you like to make a booking?`
+                },
+                action: {
+                    buttons: [{
+                        type: "reply",
+                        reply: {
+                            id: "book_room",
+                            title: "Book Now"
+                        }
+                    }]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error checking availability:', error);
+        throw error;
+    }
 }
 // Start server
 const PORT = process.env.PORT || 3000;
