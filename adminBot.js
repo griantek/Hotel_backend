@@ -1,4 +1,4 @@
-// Required dependencies
+// Enhanced AdminBot Implementation
 const express = require('express');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
@@ -71,6 +71,13 @@ async function sendWhatsAppTextMessage(to, text) {
 // Handle incoming admin messages
 async function handleIncomingMessage(phone, message) {
     try {
+        // Verify if the user is an admin
+        const isAdmin = await verifyAdmin(phone);
+        if (!isAdmin) {
+            await sendWhatsAppTextMessage(phone, 'Unauthorized access. This system is for admin use only.');
+            return;
+        }
+
         if (message.type === 'text' && message.text.body.toLowerCase() === 'hi') {
             await sendAdminMenu(phone);
         } else if (message.type === 'interactive') {
@@ -82,6 +89,16 @@ async function handleIncomingMessage(phone, message) {
             'Sorry, I encountered an error processing your request. Please try again or type "hi" to start over.'
         );
     }
+}
+
+// Verify admin status
+async function verifyAdmin(phone) {
+    return new Promise((resolve, reject) => {
+        db.get('SELECT * FROM admins WHERE phone = ?', [phone], (err, row) => {
+            if (err) reject(err);
+            resolve(!!row);
+        });
+    });
 }
 
 // Send admin menu with enhanced options
@@ -102,6 +119,21 @@ async function sendAdminMenu(phone) {
             action: {
                 button: "View Options",
                 sections: [
+                    {
+                        title: "Quick Actions",
+                        rows: [
+                            {
+                                id: "dashboard_summary",
+                                title: "Dashboard Summary",
+                                description: "View today's key metrics"
+                            },
+                            {
+                                id: "urgent_actions",
+                                title: "Urgent Actions",
+                                description: "View items needing immediate attention"
+                            }
+                        ]
+                    },
                     {
                         title: "Bookings Management",
                         rows: [
@@ -143,17 +175,22 @@ async function sendAdminMenu(phone) {
                         ]
                     },
                     {
-                        title: "Reports & Feedback",
+                        title: "Reports & Analytics",
                         rows: [
                             {
-                                id: "view_feedback",
-                                title: "Customer Feedback",
-                                description: "View recent customer feedback"
+                                id: "daily_revenue",
+                                title: "Daily Revenue",
+                                description: "View today's revenue metrics"
                             },
                             {
                                 id: "occupancy_report",
                                 title: "Occupancy Report",
-                                description: "View current occupancy statistics"
+                                description: "View occupancy statistics"
+                            },
+                            {
+                                id: "feedback_summary",
+                                title: "Feedback Summary",
+                                description: "View recent customer feedback"
                             }
                         ]
                     }
@@ -164,16 +201,51 @@ async function sendAdminMenu(phone) {
 }
 
 // Enhanced database helper functions
-async function getAllBookings() {
+async function getDashboardSummary() {
     return new Promise((resolve, reject) => {
-        db.all(
-            `SELECT b.*, u.name as guest_name, u.phone as guest_phone 
-             FROM bookings b 
-             JOIN users u ON b.user_id = u.id 
-             WHERE b.status = 'confirmed' 
-             AND b.check_out_date >= date('now')
-             ORDER BY b.check_in_date ASC`,
-            [],
+        const today = moment().format('YYYY-MM-DD');
+        db.all(`
+            SELECT 
+                (SELECT COUNT(*) FROM bookings WHERE check_in_date = ?) as today_checkins,
+                (SELECT COUNT(*) FROM bookings WHERE check_out_date = ?) as today_checkouts,
+                (SELECT COUNT(*) FROM bookings WHERE verification_status = 'pending') as pending_verifications,
+                (SELECT COUNT(*) FROM bookings WHERE paid_status = 'unpaid') as unpaid_bookings,
+                (SELECT COUNT(*) FROM feedback WHERE created_at >= datetime('now', '-24 hours')) as new_feedback,
+                (SELECT SUM(total_price) FROM bookings WHERE check_in_date = ?) as today_revenue
+            `, [today, today, today],
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows[0]);
+            }
+        );
+    });
+}
+
+async function getUrgentActions() {
+    return new Promise((resolve, reject) => {
+        const today = moment().format('YYYY-MM-DD');
+        db.all(`
+            SELECT 
+                'Overdue Checkout' as action_type,
+                b.id as booking_id,
+                u.name as guest_name,
+                b.room_number,
+                b.check_out_date
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.check_out_date < ? AND b.status = 'checked_in'
+            UNION ALL
+            SELECT 
+                'Late Check-in' as action_type,
+                b.id as booking_id,
+                u.name as guest_name,
+                b.room_number,
+                b.check_in_date
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.check_in_date = ? AND b.status = 'confirmed' AND b.checkin_status = 'pending'
+            AND datetime('now', 'localtime') > time(b.check_in_time, '+2 hours')
+        `, [today, today],
             (err, rows) => {
                 if (err) reject(err);
                 resolve(rows);
@@ -182,52 +254,22 @@ async function getAllBookings() {
     });
 }
 
-async function getPendingVerifications() {
+async function getDailyRevenue() {
     return new Promise((resolve, reject) => {
-        db.all(
-            `SELECT b.*, u.name as guest_name, u.phone as guest_phone 
-             FROM bookings b 
-             JOIN users u ON b.user_id = u.id 
-             WHERE b.verification_status = 'pending' 
-             AND b.check_in_date >= date('now')`,
-            [],
+        const today = moment().format('YYYY-MM-DD');
+        db.all(`
+            SELECT 
+                SUM(total_price) as total_revenue,
+                COUNT(*) as total_bookings,
+                AVG(total_price) as average_booking_value,
+                SUM(CASE WHEN paid_status = 'paid' THEN total_price ELSE 0 END) as collected_revenue,
+                SUM(CASE WHEN paid_status = 'unpaid' THEN total_price ELSE 0 END) as pending_revenue
+            FROM bookings
+            WHERE check_in_date = ?
+        `, [today],
             (err, rows) => {
                 if (err) reject(err);
-                resolve(rows);
-            }
-        );
-    });
-}
-
-async function getUnpaidBookings() {
-    return new Promise((resolve, reject) => {
-        db.all(
-            `SELECT b.*, u.name as guest_name, u.phone as guest_phone 
-             FROM bookings b 
-             JOIN users u ON b.user_id = u.id 
-             WHERE b.paid_status = 'unpaid' 
-             AND b.check_in_date >= date('now')`,
-            [],
-            (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            }
-        );
-    });
-}
-
-async function getRecentFeedback() {
-    return new Promise((resolve, reject) => {
-        db.all(
-            `SELECT f.*, b.room_type, u.name as guest_name
-             FROM feedback f
-             JOIN bookings b ON f.booking_id = b.id
-             JOIN users u ON b.user_id = u.id
-             ORDER BY f.created_at DESC LIMIT 10`,
-            [],
-            (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
+                resolve(rows[0]);
             }
         );
     });
@@ -243,138 +285,113 @@ async function handleButtonResponse(phone, interactive) {
         return;
     }
 
-    switch (buttonId) {
-        case 'view_all_bookings':
-            await sendAllBookings(phone);
-            break;
+    try {
+        switch (buttonId) {
+            case 'dashboard_summary':
+                await sendDashboardSummary(phone);
+                break;
 
-        case 'today_checkins':
-            await sendTodayCheckins(phone);
-            break;
+            case 'urgent_actions':
+                await sendUrgentActions(phone);
+                break;
 
-        case 'today_checkouts':
-            await sendTodayCheckouts(phone);
-            break;
+            case 'view_all_bookings':
+                await sendAllBookings(phone);
+                break;
 
-        case 'pending_verifications':
-            await sendPendingVerifications(phone);
-            break;
+            case 'today_checkins':
+                await sendTodayCheckins(phone);
+                break;
 
-        case 'room_status':
-            await sendRoomStatus(phone);
-            break;
+            case 'today_checkouts':
+                await sendTodayCheckouts(phone);
+                break;
 
-        case 'unpaid_bookings':
-            await sendUnpaidBookings(phone);
-            break;
+            case 'pending_verifications':
+                await sendPendingVerifications(phone);
+                break;
 
-        case 'view_feedback':
-            await sendRecentFeedback(phone);
-            break;
+            case 'room_status':
+                await sendRoomStatus(phone);
+                break;
 
-        case 'occupancy_report':
-            await sendOccupancyReport(phone);
-            break;
+            case 'unpaid_bookings':
+                await sendUnpaidBookings(phone);
+                break;
 
-        default:
-            await sendWhatsAppTextMessage(phone, 'Invalid option selected. Please try again.');
-            break;
+            case 'daily_revenue':
+                await sendDailyRevenue(phone);
+                break;
+
+            case 'occupancy_report':
+                await sendOccupancyReport(phone);
+                break;
+
+            case 'feedback_summary':
+                await sendFeedbackSummary(phone);
+                break;
+
+            default:
+                await sendWhatsAppTextMessage(phone, 'Invalid option selected. Please try again.');
+                break;
+        }
+    } catch (error) {
+        console.error('Error handling button response:', error);
+        await sendWhatsAppTextMessage(phone, 
+            'Sorry, I encountered an error processing your request. Please try again.'
+        );
     }
 }
 
 // Enhanced message sending functions
-async function sendPendingVerifications(phone) {
-    const pendingBookings = await getPendingVerifications();
+async function sendDashboardSummary(phone) {
+    const summary = await getDashboardSummary();
+    const message = 
+        `📊 *Dashboard Summary*\n\n` +
+        `Today's Check-ins: ${summary.today_checkins}\n` +
+        `Today's Check-outs: ${summary.today_checkouts}\n` +
+        `Pending Verifications: ${summary.pending_verifications}\n` +
+        `Unpaid Bookings: ${summary.unpaid_bookings}\n` +
+        `New Feedback: ${summary.new_feedback}\n` +
+        `Today's Revenue: $${summary.today_revenue || 0}\n\n` +
+        `For detailed reports, visit: ${process.env.WEB_APP_URL}/dashboard`;
+
+    await sendWhatsAppTextMessage(phone, message);
+}
+
+async function sendUrgentActions(phone) {
+    const actions = await getUrgentActions();
     
-    if (!pendingBookings.length) {
-        await sendWhatsAppTextMessage(phone, "No bookings pending verification.");
+    if (!actions.length) {
+        await sendWhatsAppTextMessage(phone, "No urgent actions required at this time.");
         return;
     }
 
-    const pendingList = pendingBookings.map(booking => 
-        `🏨 Booking ID: ${booking.id}\n` +
-        `👤 Guest: ${booking.guest_name}\n` +
-        `📞 Phone: ${booking.guest_phone}\n` +
-        `📅 Check-in: ${moment(booking.check_in_date).format('MMM DD, YYYY')}\n` +
-        `🛏️ Room: ${booking.room_type}\n` +
-        `💵 Amount: $${booking.total_price}\n` +
-        `📝 Notes: ${booking.notes || 'None'}`
+    const actionsList = actions.map(action => 
+        `⚠️ ${action.action_type}\n` +
+        `👤 Guest: ${action.guest_name}\n` +
+        `🏨 Room: ${action.room_number}\n` +
+        `📅 Date: ${moment(action.check_out_date || action.check_in_date).format('MMM DD, YYYY')}`
     ).join('\n-------------------\n');
 
     await sendWhatsAppTextMessage(phone, 
-        `*Bookings Pending Verification*:\n\n${pendingList}`
+        `*Urgent Actions Required*:\n\n${actionsList}\n\n` +
+        `Take action at: ${process.env.WEB_APP_URL}/urgent-actions`
     );
 }
 
-async function sendUnpaidBookings(phone) {
-    const unpaidBookings = await getUnpaidBookings();
-    
-    if (!unpaidBookings.length) {
-        await sendWhatsAppTextMessage(phone, "No unpaid bookings found.");
-        return;
-    }
+async function sendDailyRevenue(phone) {
+    const revenue = await getDailyRevenue();
+    const message = 
+        `💰 *Daily Revenue Report*\n\n` +
+        `Total Revenue: $${revenue.total_revenue || 0}\n` +
+        `Total Bookings: ${revenue.total_bookings || 0}\n` +
+        `Average Booking Value: $${Math.round(revenue.average_booking_value || 0)}\n` +
+        `Collected Revenue: $${revenue.collected_revenue || 0}\n` +
+        `Pending Revenue: $${revenue.pending_revenue || 0}\n\n` +
+        `View detailed reports at: ${process.env.WEB_APP_URL}/revenue`;
 
-    const unpaidList = unpaidBookings.map(booking => 
-        `🏨 Booking ID: ${booking.id}\n` +
-        `👤 Guest: ${booking.guest_name}\n` +
-        `📞 Phone: ${booking.guest_phone}\n` +
-        `📅 Check-in: ${moment(booking.check_in_date).format('MMM DD, YYYY')}\n` +
-        `🛏️ Room: ${booking.room_type}\n` +
-        `💵 Amount Due: $${booking.total_price}`
-    ).join('\n-------------------\n');
-
-    await sendWhatsAppTextMessage(phone, 
-        `*Unpaid Bookings*:\n\n${unpaidList}`
-    );
-}
-
-async function sendRecentFeedback(phone) {
-    const feedback = await getRecentFeedback();
-    
-    if (!feedback.length) {
-        await sendWhatsAppTextMessage(phone, "No feedback found.");
-        return;
-    }
-
-    const feedbackList = feedback.map(f => 
-        `⭐ Rating: ${f.rating}/5\n` +
-        `👤 Guest: ${f.guest_name}\n` +
-        `🛏️ Room: ${f.room_type}\n` +
-        `💭 Comment: ${f.feedback || 'No comment'}\n` +
-        `📅 Date: ${moment(f.created_at).format('MMM DD, YYYY')}`
-    ).join('\n-------------------\n');
-
-    await sendWhatsAppTextMessage(phone, 
-        `*Recent Customer Feedback*:\n\n${feedbackList}`
-    );
-}
-
-async function sendOccupancyReport(phone) {
-    const rooms = await getRoomStatus();
-    let totalRooms = 0;
-    let occupiedRooms = 0;
-    let revenue = 0;
-
-    rooms.forEach(room => {
-        totalRooms += room.availability;
-        occupiedRooms += room.occupied;
-        revenue += room.occupied * room.price;
-    });
-
-    const occupancyRate = ((occupiedRooms / totalRooms) * 100).toFixed(1);
-
-    const report = 
-        `📊 *Occupancy Report*\n\n` +
-        `Total Rooms: ${totalRooms}\n` +
-        `Occupied Rooms: ${occupiedRooms}\n` +
-        `Occupancy Rate: ${occupancyRate}%\n` +
-        `Today's Revenue: $${revenue.toFixed(2)}\n\n` +
-        `*Breakdown by Room Type:*\n` +
-        rooms.map(room => 
-            `${room.type}: ${room.occupied}/${room.availability} (${((room.occupied/room.availability)*100).toFixed(1)}%)`
-        ).join('\n');
-
-    await sendWhatsAppTextMessage(phone, report);
+    await sendWhatsAppTextMessage(phone, message);
 }
 
 // Export the message handling functionality
