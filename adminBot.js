@@ -421,6 +421,249 @@ async function sendDailyRevenue(phone) {
     await sendWhatsAppTextMessage(phone, message);
 }
 
+async function sendTodayCheckins(phone) {
+    try {
+        const todayCheckins = await getTodayCheckins(); // Fetch today's check-ins from the database
+        if (todayCheckins.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No check-ins scheduled for today.");
+            return;
+        }
+
+        let message = "📌 *Today's Check-ins*\n\n";
+        todayCheckins.forEach((checkin, index) => {
+            message += `📅 Check-in #${index + 1}\n`;
+            message += `👤 Guest: ${checkin.guest_name}\n`;
+            message += `🏨 Room No: ${checkin.room_number}\n`;
+            message += `🕒 Check-in Time: ${checkin.check_in_time}\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending today's check-ins:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve today's check-ins. Please try again later.");
+    }
+}
+
+async function getTodayCheckins() {
+    return new Promise((resolve, reject) => {
+        const today = moment().format('YYYY-MM-DD');
+        db.all(
+            `SELECT b.id, u.name as guest_name, b.room_number, b.check_in_time
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.check_in_date = ? AND b.status = 'confirmed'`,
+            [today],
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
+async function sendTodayCheckouts(phone) {
+    try {
+        const todayCheckouts = await getTodayCheckouts(); // Fetch today's check-outs from the database
+        if (todayCheckouts.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No check-outs scheduled for today.");
+            return;
+        }
+
+        let message = "📌 *Today's Check-outs*\n\n";
+        todayCheckouts.forEach((checkout, index) => {
+            message += `📅 Check-out #${index + 1}\n`;
+            message += `👤 Guest: ${checkout.guest_name}\n`;
+            message += `🏨 Room No: ${checkout.room_number}\n`;
+            message += `🕒 Check-out Time: ${checkout.check_out_time}\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending today's check-outs:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve today's check-outs. Please try again later.");
+    }
+}
+
+async function getTodayCheckouts() {
+    return new Promise((resolve, reject) => {
+        const today = moment().format('YYYY-MM-DD');
+        db.all(
+            `SELECT b.id, u.name as guest_name, b.room_number, b.check_out_time
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.check_out_date = ? AND b.status = 'checked_in'`,
+            [today],
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
+async function sendRoomStatus(phone) {
+    try {
+        const roomStatus = await getRoomStatus(); // Fetch current room status from the database
+        if (roomStatus.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No room status data available.");
+            return;
+        }
+
+        let message = "📌 *Room Status*\n\n";
+        roomStatus.forEach((room, index) => {
+            message += `🏨 Room #${room.room_number}\n`;
+            message += `🛏️ Type: ${room.room_type}\n`;
+            message += `👤 Status: ${room.status}\n`;
+            message += `💵 Price: $${room.price}\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending room status:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve room status. Please try again later.");
+    }
+}
+
+async function getRoomStatus() {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT room_number, room_type, status, price
+            FROM rooms
+            ORDER BY room_number ASC`,
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
+async function sendUnpaidBookings(phone) {
+    try {
+        const unpaidBookings = await getUnpaidBookings(); // Fetch unpaid bookings from the database
+        if (unpaidBookings.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No unpaid bookings at the moment.");
+            return;
+        }
+
+        let message = "📌 *Unpaid Bookings List*\n\n";
+        unpaidBookings.forEach((booking, index) => {
+            message += `📅 Booking #${index + 1}\n`;
+            message += `👤 Guest: ${booking.guest_name}\n`;
+            message += `🏨 Room Type: ${booking.room_type}\n`;
+            message += `🏨 Room No: ${booking.room_number}\n`;
+            message += `📆 Check-in: ${booking.check_in_date}\n`;
+            message += `📆 Check-out: ${booking.check_out_date}\n`;
+            message += `💵 Amount: $${booking.total_price}\n`;
+            message += `⚠️ Status: Pending Payment\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending unpaid bookings:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve unpaid bookings. Please try again later.");
+    }
+}
+
+async function getUnpaidBookings() {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT b.id, u.name as guest_name, b.room_type, b.room_number, b.check_in_date, b.check_out_date, b.total_price
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.paid_status = 'unpaid'
+            ORDER BY b.check_in_date DESC`,
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
+async function sendOccupancyReport(phone) {
+    try {
+        const occupancyData = await getOccupancyReport(); // Fetch occupancy report data from the database
+        if (!occupancyData) {
+            await sendWhatsAppTextMessage(phone, "No occupancy data available.");
+            return;
+        }
+
+        let message = "📌 *Occupancy Report*\n\n";
+        message += `🏨 Total Rooms: ${occupancyData.total_rooms}\n`;
+        message += `✅ Occupied Rooms: ${occupancyData.occupied_rooms}\n`;
+        message += `❌ Available Rooms: ${occupancyData.available_rooms}\n`;
+        message += `📈 Occupancy Rate: ${occupancyData.occupancy_rate}%\n`;
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending occupancy report:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve occupancy report. Please try again later.");
+    }
+}
+
+async function getOccupancyReport() {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT 
+                COUNT(*) AS total_rooms,
+                SUM(CASE WHEN status = 'occupied' THEN 1 ELSE 0 END) AS occupied_rooms,
+                SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_rooms,
+                ROUND((SUM(CASE WHEN status = 'occupied' THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS occupancy_rate
+            FROM rooms`,
+            (err, row) => {
+                if (err) reject(err);
+                resolve(row);
+            }
+        );
+    });
+}
+
+async function sendFeedbackSummary(phone) {
+    try {
+        const feedbackData = await getFeedbackSummary(); // Fetch feedback summary from the database
+        if (!feedbackData || feedbackData.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No recent feedback available.");
+            return;
+        }
+
+        let message = "📌 *Recent Customer Feedback*\n\n";
+        feedbackData.forEach((feedback, index) => {
+            message += `📝 Feedback #${index + 1}\n`;
+            message += `👤 Guest: ${feedback.guest_name}\n`;
+            message += `⭐ Rating: ${feedback.rating}/5\n`;
+            message += `💬 Comment: ${feedback.comment}\n`;
+            message += `📆 Date: ${feedback.created_at}\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending feedback summary:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve feedback. Please try again later.");
+    }
+}
+
+async function getFeedbackSummary() {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT u.name AS guest_name, f.rating, f.comment, f.created_at
+            FROM feedback f
+            JOIN users u ON f.user_id = u.id
+            ORDER BY f.created_at DESC
+            LIMIT 5`, // Fetch the latest 5 feedback entries
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
 // Export the message handling functionality
 module.exports = {
     handleMessage: async (body) => {
