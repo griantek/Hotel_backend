@@ -514,8 +514,8 @@ async function sendRoomStatus(phone) {
         let message = "📌 *Room Status*\n\n";
         roomStatus.forEach((room, index) => {
             message += `🛏️ Type: ${room.type}\n`;
-            message += `👤 Status: ${room.price}\n`;
-            message += `💵 Price: $${room.availability}\n`;
+            message += `👤 Availability: ${room.availability}\n`;
+            message += `💵 Price: $${room.price}\n`;
             message += "-------------------\n";
         });
 
@@ -610,9 +610,9 @@ async function getOccupancyReport() {
         db.get(
             `SELECT 
                 COUNT(*) AS total_rooms,
-                SUM(CASE WHEN status = 'occupied' THEN 1 ELSE 0 END) AS occupied_rooms,
-                SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_rooms,
-                ROUND((SUM(CASE WHEN status = 'occupied' THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS occupancy_rate
+                SUM(CASE WHEN availability > 0 THEN 1 ELSE 0 END) AS available_rooms,
+                SUM(CASE WHEN availability = 0 THEN 1 ELSE 0 END) AS occupied_rooms,
+                ROUND((SUM(CASE WHEN availability = 0 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS occupancy_rate
             FROM rooms`,
             (err, row) => {
                 if (err) reject(err);
@@ -650,9 +650,10 @@ async function sendFeedbackSummary(phone) {
 async function getFeedbackSummary() {
     return new Promise((resolve, reject) => {
         db.all(
-            `SELECT u.name AS guest_name, f.rating, f.comment, f.created_at
+            `SELECT u.name AS guest_name, f.rating, f.feedback AS comment, f.created_at
             FROM feedback f
-            JOIN users u ON f.user_id = u.id
+            JOIN bookings b ON f.booking_id = b.id
+            JOIN users u ON b.user_id = u.id
             ORDER BY f.created_at DESC
             LIMIT 5`, // Fetch the latest 5 feedback entries
             (err, rows) => {
