@@ -342,6 +342,47 @@ async function sendDashboardSummary(phone) {
     await sendWhatsAppTextMessage(phone, message);
 }
 
+async function sendAllBookings(phone) {
+    try {
+        const bookings = await getAllBookings(); // Fetch bookings from the database
+        if (bookings.length === 0) {
+            await sendWhatsAppTextMessage(phone, "No bookings found.");
+            return;
+        }
+
+        let message = "📌 *All Bookings List*\n\n";
+        bookings.forEach((booking, index) => {
+            message += `📅 Booking #${index + 1}\n`;
+            message += `👤 Guest: ${booking.guest_name}\n`;
+            message += `🏨 Room: ${booking.room_number}\n`;
+            message += `📆 Check-in: ${booking.check_in_date}\n`;
+            message += `📆 Check-out: ${booking.check_out_date}\n`;
+            message += `💵 Status: ${booking.paid_status}\n`;
+            message += "-------------------\n";
+        });
+
+        await sendWhatsAppTextMessage(phone, message);
+    } catch (error) {
+        console.error("Error sending all bookings:", error);
+        await sendWhatsAppTextMessage(phone, "Failed to retrieve bookings. Please try again later.");
+    }
+}
+
+async function getAllBookings() {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT b.id, u.name as guest_name, b.room_number, b.check_in_date, b.check_out_date, b.paid_status
+            FROM bookings b
+            JOIN users u ON b.user_id = u.id
+            ORDER BY b.check_in_date DESC`, 
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
 async function sendUrgentActions(phone) {
     const actions = await getUrgentActions();
     
