@@ -532,7 +532,7 @@ async function getRoomStatus() {
         db.all(
             `SELECT type, price, availability
             FROM rooms
-            ORDER BY room_number ASC`,
+            ORDER BY price ASC`,
             (err, rows) => {
                 if (err) reject(err);
                 resolve(rows);
