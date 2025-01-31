@@ -513,10 +513,9 @@ async function sendRoomStatus(phone) {
 
         let message = "📌 *Room Status*\n\n";
         roomStatus.forEach((room, index) => {
-            message += `🏨 Room #${room.room_number}\n`;
-            message += `🛏️ Type: ${room.room_type}\n`;
-            message += `👤 Status: ${room.status}\n`;
-            message += `💵 Price: $${room.price}\n`;
+            message += `🛏️ Type: ${room.type}\n`;
+            message += `👤 Status: ${room.price}\n`;
+            message += `💵 Price: $${room.availability}\n`;
             message += "-------------------\n";
         });
 
