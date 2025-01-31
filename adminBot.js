@@ -530,7 +530,7 @@ async function sendRoomStatus(phone) {
 async function getRoomStatus() {
     return new Promise((resolve, reject) => {
         db.all(
-            `SELECT room_number, room_type, status, price
+            `SELECT type, price, availability
             FROM rooms
             ORDER BY room_number ASC`,
             (err, rows) => {
