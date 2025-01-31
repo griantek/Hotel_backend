@@ -217,6 +217,7 @@ async function getUrgentActions() {
                 'Overdue Checkout' as action_type,
                 b.id as booking_id,
                 u.name as guest_name,
+                b.room_type as room_type,
                 b.room_number,
                 b.check_out_date
             FROM bookings b
@@ -354,7 +355,8 @@ async function sendAllBookings(phone) {
         bookings.forEach((booking, index) => {
             message += `📅 Booking #${index + 1}\n`;
             message += `👤 Guest: ${booking.guest_name}\n`;
-            message += `🏨 Room: ${booking.room_number}\n`;
+            message += `🏨 Room Type: ${booking.room_type}\n`;
+            message += `🏨 Room No: ${booking.room_number}\n`;
             message += `📆 Check-in: ${booking.check_in_date}\n`;
             message += `📆 Check-out: ${booking.check_out_date}\n`;
             message += `💵 Status: ${booking.paid_status}\n`;
@@ -371,7 +373,7 @@ async function sendAllBookings(phone) {
 async function getAllBookings() {
     return new Promise((resolve, reject) => {
         db.all(
-            `SELECT b.id, u.name as guest_name, b.room_number, b.check_in_date, b.check_out_date, b.paid_status
+            `SELECT b.id, u.name as guest_name, b.room_type, b.room_number, b.check_in_date, b.check_out_date, b.paid_status
             FROM bookings b
             JOIN users u ON b.user_id = u.id
             ORDER BY b.check_in_date DESC`, 
@@ -394,7 +396,8 @@ async function sendUrgentActions(phone) {
     const actionsList = actions.map(action => 
         `⚠️ ${action.action_type}\n` +
         `👤 Guest: ${action.guest_name}\n` +
-        `🏨 Room: ${action.room_number}\n` +
+        `🏨 Room Type: ${action.room_type}\n` +
+        `🏨 Room No: ${action.room_number}\n` +
         `📅 Date: ${moment(action.check_out_date || action.check_in_date).format('MMM DD, YYYY')}`
     ).join('\n-------------------\n');
 
