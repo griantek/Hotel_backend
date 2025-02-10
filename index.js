@@ -175,6 +175,36 @@ app.post('/admin/login', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Add admin registration endpoint
+app.post('/admin/register', async (req, res) => {
+  const { username, password } = req.body;
+  console.log('👤 Admin registration attempt:', { username, timestamp: new Date().toISOString() });
+
+  try {
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Insert into database
+    db.run(
+      'INSERT INTO admins (username, password) VALUES (?, ?)',
+      [username, hashedPassword],
+      function(err) {
+        if (err) {
+          console.error('❌ Admin registration failed:', err);
+          return res.status(400).json({ error: 'Username already exists or database error' });
+        }
+        
+        console.log('✅ Admin registered successfully:', { username, id: this.lastID });
+        res.status(201).json({ message: 'Admin created successfully', id: this.lastID });
+      }
+    );
+  } catch (error) {
+    console.error('❌ Unexpected error during admin registration:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // View users
 app.get('/admin/users', authenticateAdmin, (req, res) => {
   db.all('SELECT * FROM users', (err, users) => {
