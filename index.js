@@ -18,6 +18,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
 
+// Add root route
+app.get('/', (req, res) => {
+  res.json({
+    message: "Welcome to Hotel Management API",
+    status: "Server is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Configure multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -131,15 +140,40 @@ db.serialize(() => {
 //Admin
 app.post('/admin/login', async (req, res) => {
   const { username, password } = req.body;
-  db.get('SELECT * FROM admins WHERE username = ?', [username], async (err, admin) => {
-      if (err || !admin) return res.status(401).json({ error: 'Invalid username or password' });
+  console.log('🔐 Login attempt:', { username, timestamp: new Date().toISOString() });
+
+  try {
+    db.get('SELECT * FROM admins WHERE username = ?', [username], async (err, admin) => {
+      if (err) {
+        console.error('❌ Database error during login:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+
+      if (!admin) {
+        console.log('❌ Login failed: Invalid username -', username);
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
 
       const isValidPassword = await bcrypt.compare(password, admin.password);
-      if (!isValidPassword) return res.status(401).json({ error: 'Invalid username or password' });
+      
+      if (!isValidPassword) {
+        console.log('❌ Login failed: Invalid password for user -', username);
+        return res.status(401).json({ error: 'Invalid username or password' });
+      }
 
       const token = jwt.sign({ id: admin.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      console.log('✅ Login successful:', {
+        username,
+        adminId: admin.id,
+        timestamp: new Date().toISOString()
+      });
+      
       res.json({ token });
-  });
+    });
+  } catch (error) {
+    console.error('❌ Unexpected error during login:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 // View users
 app.get('/admin/users', authenticateAdmin, (req, res) => {
