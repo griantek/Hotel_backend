@@ -353,6 +353,11 @@ async function handleButtonResponse(phone, name, interactive, user) {
             await sendSpaInfo(phone);
             break;
             
+        case 'services':
+        case 'room_service':
+            await sendServiceOptions(phone, user);
+            break;
+
         default:
             await sendWhatsAppTextMessage(phone, 'I apologize, but I didn\'t understand that. Please try again.');
             break;
@@ -824,6 +829,97 @@ async function initiateAvailabilityCheck(phone) {
         throw error;
     }
 }
+
+async function sendServiceOptions(phone, user) {
+    try {
+        // First verify if user is checked in
+        const activeBooking = await getActiveCheckedInBooking(user.id);
+        if (!activeBooking) {
+            await sendWhatsAppTextMessage(phone,
+                "Sorry, hotel services are only available for checked-in guests. Please contact the front desk for assistance."
+            );
+            return;
+        }
+
+        // Get available services grouped by category
+        const services = await new Promise((resolve, reject) => {
+            db.all(
+                `SELECT category, id, name, description, price
+                 FROM hotel_services
+                 WHERE availability = 1
+                 ORDER BY category, name`,
+                (err, rows) => {
+                    if (err) reject(err);
+                    resolve(rows);
+                }
+            );
+        });
+
+        // Group services by category
+        const servicesByCategory = {};
+        services.forEach(service => {
+            if (!servicesByCategory[service.category]) {
+                servicesByCategory[service.category] = [];
+            }
+            servicesByCategory[service.category].push(service);
+        });
+
+        // Create sections for the list message
+        const sections = Object.entries(servicesByCategory).map(([category, services]) => ({
+            title: category,
+            rows: services.map(service => ({
+                id: `service_${service.id}`,
+                title: service.name,
+                description: service.description + (service.price ? ` - $${service.price}` : '')
+            }))
+        }));
+
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Hotel Services"
+                },
+                body: {
+                    text: `Hello! Please select a service you'd like to request:`
+                },
+                footer: {
+                    text: "Available 24/7"
+                },
+                action: {
+                    button: "View Services",
+                    sections: sections
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending service options:', error);
+        await sendWhatsAppTextMessage(phone, 
+            'Sorry, there was an error retrieving our services. Please try again or contact the front desk for assistance.'
+        );
+    }
+}
+
+// Add helper function to check if user is checked in
+async function getActiveCheckedInBooking(userId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT * FROM bookings 
+             WHERE user_id = ? 
+             AND status = 'confirmed' 
+             AND checkin_status = 'checked_in'
+             AND check_in_date <= date('now')
+             AND check_out_date >= date('now')`,
+            [userId],
+            (err, booking) => {
+                if (err) reject(err);
+                resolve(booking);
+            }
+        );
+    });
+}
+
 // Start server
 module.exports = {
     handleMessage: async (body) => {

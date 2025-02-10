@@ -135,6 +135,38 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (room_id) REFERENCES rooms (id)
 )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS hotel_services (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL,
+    availability BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Insert default services if not exists
+  db.get('SELECT COUNT(*) as count FROM hotel_services', [], (err, row) => {
+    if (row.count === 0) {
+      const defaultServices = [
+        ['Room Service', 'In-Room Dining', '24/7 food and beverage service to your room', null, 1],
+        ['Room Service', 'Mini Bar Restock', 'Replenishment of mini bar items', null, 1],
+        ['Housekeeping', 'Room Cleaning', 'Daily room cleaning service', null, 1],
+        ['Housekeeping', 'Laundry Service', 'Same-day laundry and dry cleaning', null, 1],
+        ['Amenities', 'Swimming Pool', 'Access to pool facilities', null, 1],
+        ['Amenities', 'Gym Access', '24/7 fitness center access', null, 1],
+        ['Amenities', 'Spa Services', 'Massage and wellness treatments', null, 1],
+        ['Concierge', 'Tour Booking', 'Local tour arrangements', null, 1],
+        ['Concierge', 'Transportation', 'Airport transfers and local transport', null, 1]
+      ];
+
+      const stmt = db.prepare(`INSERT INTO hotel_services 
+        (category, name, description, price, availability) VALUES (?, ?, ?, ?, ?)`);
+      defaultServices.forEach(service => stmt.run(service));
+      stmt.finalize();
+    }
+  });
 });
 
 //Admin
@@ -774,6 +806,7 @@ function createReminders(bookingId, checkInDate, checkInTime) {
   db.run(`INSERT INTO reminders (booking_id, reminder_time, reminder_type) VALUES (?, ?, ?)`, 
     [bookingId, reminder1hr, '1hr']);
 }
+
 //send  reminder
 cron.schedule('* * * * *', () => {
   const now = moment().add(5, 'hours').add(30, 'minutes').format('YYYY-MM-DD HH:mm:ss');
@@ -817,6 +850,7 @@ function generateSimpleToken() {
   }
   return token;
 }
+
 // In-memory storage for tokens (key-value store: token -> phone)
 const tokenStore = {};  
 // Updated /generate-token
@@ -836,6 +870,7 @@ app.get("/generate-token", (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 // Updated /validate-token
 app.get("/validate-token", (req, res) => {
   const { token } = req.query;
@@ -906,6 +941,25 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
   const updates = req.body;
   
   try {
+    // If check-in status is being updated to 'checked_in'
+    if (updates.checkin_status === 'checked_in') {
+      db.get(
+        `SELECT b.*, u.phone, u.name as guest_name
+         FROM bookings b
+         JOIN users u ON b.user_id = u.id
+         WHERE b.id = ?`,
+        [bookingId],
+        async (err, booking) => {
+          if (err || !booking) {
+            return res.status(404).json({ error: 'Booking not found' });
+          }
+
+          // Send welcome message with services
+          await sendCheckinWelcomeMessage(booking.phone, booking.guest_name, booking.room_number);
+        }
+      );
+    }
+
     // First get the current booking and room details
     db.get(
       `SELECT b.*, r.price as room_price 
@@ -998,6 +1052,45 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
     res.status(500).json({ error: error.message });
   }
 });
+
+// Add helper function to send welcome message
+async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
+  try {
+    // Get available services
+    const services = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT category, GROUP_CONCAT(name, ': ' || description) as services
+         FROM hotel_services
+         WHERE availability = 1
+         GROUP BY category`,
+        (err, rows) => {
+          if (err) reject(err);
+          resolve(rows);
+        }
+      );
+    });
+
+    // Format services message
+    let servicesText = "\n\nOur Available Services:";
+    services.forEach(category => {
+      servicesText += `\n\n*${category.category}*:\n`;
+      category.services.split(',').forEach(service => {
+        servicesText += `• ${service.trim()}\n`;
+      });
+    });
+
+    const welcomeMessage = 
+      `🎉 Welcome to your room ${guestName}! 🎉\n\n` +
+      `We're delighted to have you with us. Your room number is: *${roomNumber}*\n` +
+      `To request any service, simply type "services" in this chat.${servicesText}\n\n` +
+      `For immediate assistance, please contact our front desk by dialing *0* from your room phone.\n\n` +
+      `We hope you have a wonderful stay with us! 🌟`;
+
+    await sendWhatsAppMessage(phone, welcomeMessage);
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+}
 
 // Add new endpoint to get room types
 // Update room-types endpoint to include photos
