@@ -348,6 +348,43 @@ async function getServiceById(id) {
     });
 }
 
+// Add service response messages object
+const serviceResponseMessages = {
+    Food: {
+        confirm: (serviceName) => 
+            `✅ Your order for ${serviceName} has been confirmed.\n` +
+            `Our team is preparing your meal.\n` +
+            `Estimated delivery: 30 minutes`,
+        decline: (serviceName) =>
+            `❌ We apologize, but we are unable to process your order for ${serviceName} at this time.\n` +
+            `Please contact front desk for alternatives.`
+    },
+    Housekeeping: {
+        confirm: (serviceName) =>
+            `✅ Your ${serviceName} request has been confirmed.\n` +
+            `Our housekeeping staff will arrive within 15 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize, but we are unable to provide ${serviceName} at this moment.\n` +
+            `Please try again in 30 minutes.`
+    },
+    Amenities: {
+        confirm: (serviceName) =>
+            `✅ Your request for ${serviceName} has been confirmed.\n` +
+            `Items will be delivered to your room within 10 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize, but ${serviceName} is currently unavailable.\n` +
+            `Please contact front desk for alternatives.`
+    },
+    Maintenance: {
+        confirm: (serviceName) =>
+            `✅ Your ${serviceName} request has been confirmed.\n` +
+            `Our maintenance team will arrive within 20 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize for the delay. Our maintenance team is currently handling other requests.\n` +
+            `We will prioritize your request for ${serviceName} as soon as possible.`
+    }
+};
+
 // Add new helper function
 async function handleServiceResponse(action, serviceId, bookingId) {
     try {
