@@ -268,6 +268,13 @@ async function getDailyRevenue() {
 async function handleButtonResponse(phone, interactive) {
     const buttonId = interactive.button_reply?.id || interactive.list_reply?.id;
     
+    // Add service confirmation handling
+    if (buttonId.startsWith('confirm_service_') || buttonId.startsWith('decline_service_')) {
+        const [action, , serviceId, bookingId] = buttonId.split('_');
+        await handleServiceResponse(action, serviceId, bookingId);
+        return;
+    }
+
     if (!buttonId) {
         console.error('No valid button or list ID found in response:', interactive);
         await sendWhatsAppTextMessage(phone, 'Sorry, there was an error processing your request. Please try again.');
@@ -326,6 +333,55 @@ async function handleButtonResponse(phone, interactive) {
             'Sorry, I encountered an error processing your request. Please try again.'
         );
     }
+}
+
+// Add new helper function
+async function handleServiceResponse(action, serviceId, bookingId) {
+    try {
+        const isConfirm = action === 'confirm';
+        const status = isConfirm ? 'confirmed' : 'declined';
+
+        // Get service and booking details
+        const [service, booking] = await Promise.all([
+            getServiceById(serviceId),
+            getBookingById(bookingId)
+        ]);
+
+        // Update service request status
+        await updateServiceRequest(serviceId, bookingId, status);
+
+        // Get user's phone number
+        const userPhone = await getUserPhone(booking.user_id);
+
+        // Send response to user
+        const message = serviceResponseMessages[service.category][action](service.name);
+        await sendWhatsAppTextMessage(userPhone, message);
+
+        // Confirm to admin
+        await sendWhatsAppTextMessage(process.env.ADMIN_PHONE,
+            `${isConfirm ? '✅' : '❌'} ${service.category} request for Room ${booking.room_number} has been ${status}.`
+        );
+
+    } catch (error) {
+        console.error('Error handling service response:', error);
+    }
+}
+
+// Add these helper functions
+async function updateServiceRequest(serviceId, bookingId, status) {
+    return new Promise((resolve, reject) => {
+        db.run(
+            `UPDATE service_requests 
+             SET status = ?, 
+                 completed_at = CASE WHEN ? = 'confirmed' THEN CURRENT_TIMESTAMP ELSE NULL END
+             WHERE service_id = ? AND booking_id = ?`,
+            [status, status, serviceId, bookingId],
+            (err) => {
+                if (err) reject(err);
+                resolve();
+            }
+        );
+    });
 }
 
 // Enhanced message sending functions

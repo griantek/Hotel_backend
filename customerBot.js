@@ -277,6 +277,13 @@ async function handleButtonResponse(phone, name, interactive, user) {
         return;
     }
 
+    // Add service request handling
+    if (buttonId.startsWith('service_')) {
+        const serviceId = buttonId.split('_')[1];
+        await handleServiceRequest(phone, user, serviceId);
+        return;
+    }
+
     switch (buttonId) {
         case 'book_room':
             const hasBookings = user ? await checkUserBookings(user.id) : false;
@@ -1081,6 +1088,149 @@ async function getServicesByCategory(category) {
         );
     });
 }
+
+// Add new helper functions
+async function handleServiceRequest(phone, user, serviceId) {
+    try {
+        const booking = await getActiveCheckedInBooking(user.id);
+        const service = await getServiceById(serviceId);
+        
+        if (!service) {
+            await sendWhatsAppTextMessage(phone, "Service not found. Please try again.");
+            return;
+        }
+
+        // Send acknowledgment to user
+        const userMessage = getServiceRequestAcknowledgment(service.category);
+        await sendWhatsAppTextMessage(phone, userMessage);
+
+        // Send notification to admin
+        const adminMessage = formatAdminServiceNotification(service, user.name, booking.room_number);
+        await sendAdminServiceNotification(process.env.ADMIN_PHONE, adminMessage, serviceId, booking.id);
+
+    } catch (error) {
+        console.error('Error handling service request:', error);
+        await sendWhatsAppTextMessage(phone, 
+            'Sorry, there was an error processing your request. Please try again or contact the front desk.'
+        );
+    }
+}
+
+async function getServiceById(id) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT * FROM hotel_services WHERE id = ?`,
+            [id],
+            (err, service) => {
+                if (err) reject(err);
+                resolve(service);
+            }
+        );
+    });
+}
+
+function getServiceRequestAcknowledgment(category) {
+    const acknowledgments = {
+        'Food': '🍽️ Please wait while we confirm your order...',
+        'Housekeeping': '🧹 Please wait while we process your housekeeping request...',
+        'Amenities': '🛄 Please wait while we process your amenity request...',
+        'Maintenance': '🔧 Please wait while we process your maintenance request...'
+    };
+    return acknowledgments[category] || 'Please wait while we process your request...';
+}
+
+function formatAdminServiceNotification(service, guestName, roomNumber) {
+    const icons = {
+        'Food': '🍽️',
+        'Housekeeping': '🧹',
+        'Amenities': '🛄',
+        'Maintenance': '🔧'
+    };
+
+    return `🔔 New ${service.category} Request!\n\n` +
+           `Guest: ${guestName} (Room ${roomNumber})\n` +
+           `Requested: ${service.name} ${icons[service.category]}\n` +
+           `Time: ${moment().format('h:mm A')}` +
+           (service.price ? `\nPrice: $${service.price}` : '');
+}
+
+async function sendAdminServiceNotification(adminPhone, message, serviceId, bookingId) {
+    await sendWhatsAppMessage(adminPhone, {
+        interactive: {
+            type: "button",
+            body: {
+                text: message
+            },
+            action: {
+                buttons: [
+                    {
+                        type: "reply",
+                        reply: {
+                            id: `confirm_service_${serviceId}_${bookingId}`,
+                            title: "Confirm"
+                        }
+                    },
+                    {
+                        type: "reply",
+                        reply: {
+                            id: `decline_service_${serviceId}_${bookingId}`,
+                            title: "Decline"
+                        }
+                    }
+                ]
+            }
+        }
+    });
+}
+
+// Add to the service response messages object
+const serviceResponseMessages = {
+    Food: {
+        confirm: (serviceName) => 
+            `✅ Your order for ${serviceName} has been confirmed.\n` +
+            `Our team is preparing your meal.\n` +
+            `Estimated delivery: 30 minutes`,
+        decline: (serviceName) =>
+            `❌ We apologize, but we are unable to process your order for ${serviceName} at this time.\n` +
+            `Please contact front desk for alternatives.`
+    },
+    Housekeeping: {
+        confirm: (serviceName) =>
+            `✅ Your ${serviceName} request has been confirmed.\n` +
+            `Our housekeeping staff will arrive within 15 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize, but we are unable to provide ${serviceName} at this moment.\n` +
+            `Please try again in 30 minutes.`
+    },
+    Amenities: {
+        confirm: (serviceName) =>
+            `✅ Your request for ${serviceName} has been confirmed.\n` +
+            `Items will be delivered to your room within 10 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize, but ${serviceName} is currently unavailable.\n` +
+            `Please contact front desk for alternatives.`
+    },
+    Maintenance: {
+        confirm: (serviceName) =>
+            `✅ Your ${serviceName} request has been confirmed.\n` +
+            `Our maintenance team will arrive within 20 minutes.`,
+        decline: (serviceName) =>
+            `❌ We apologize for the delay. Our maintenance team is currently handling other requests.\n` +
+            `We will prioritize your request for ${serviceName} as soon as possible.`
+    }
+};
+
+// Add to database schema
+db.run(`CREATE TABLE IF NOT EXISTS service_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    service_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    FOREIGN KEY (booking_id) REFERENCES bookings (id),
+    FOREIGN KEY (service_id) REFERENCES hotel_services (id)
+)`);
 
 // Start server
 module.exports = {
