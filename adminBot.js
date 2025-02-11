@@ -335,6 +335,19 @@ async function handleButtonResponse(phone, interactive) {
     }
 }
 
+async function getServiceById(id) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT * FROM hotel_services WHERE id = ?`,
+            [id],
+            (err, service) => {
+                if (err) reject(err);
+                resolve(service);
+            }
+        );
+    });
+}
+
 // Add new helper function
 async function handleServiceResponse(action, serviceId, bookingId) {
     try {
