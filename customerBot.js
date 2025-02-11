@@ -1048,23 +1048,17 @@ async function sendMaintenanceMenu(phone) {
                 type: "list",
                 header: {
                     type: "text",
-                    text: "Maintenance Services"
+                    text: "Maintenance"
                 },
                 body: {
-                    text: "Select an issue to report:"
-                },
-                footer: {
-                    text: "Available 24/7"
+                    text: "What issue would you like to report?"
                 },
                 action: {
-                    button: "Select Issue",  // Changed button text
+                    button: "View List",
                     sections: [{
-                        title: "Available Services",
                         rows: maintenanceServices.map(service => ({
                             id: `service_${service.id}`,
-                            title: service.name,
-                            // Shortened description to avoid length issues
-                            description: service.description.substring(0, 50)
+                            title: service.name
                         }))
                     }]
                 }
@@ -1072,7 +1066,6 @@ async function sendMaintenanceMenu(phone) {
         });
     } catch (error) {
         console.error('Error sending maintenance menu:', error);
-        // Fallback to simple text message if interactive message fails
         await sendWhatsAppTextMessage(phone, 
             "Sorry, I couldn't display the maintenance menu. Please contact the front desk for assistance."
         );
