@@ -113,8 +113,14 @@ async function handleIncomingMessage(phone, message, name) {
         const hasBookings = user ? await checkUserBookings(user.id) : false;
         userName = user?.name || name;
 
-        if (message.type === 'text' && message.text.body.toLowerCase() === 'hi') {
-            await sendInitialGreeting(phone, userName, hasBookings);
+        // Add handling for text "services"
+        if (message.type === 'text') {
+            const text = message.text.body.toLowerCase();
+            if (text === 'hi') {
+                await sendInitialGreeting(phone, userName, hasBookings);
+            } else if (text === 'services') {
+                await sendServiceOptions(phone, user);
+            }
         } else if (message.type === 'interactive') {
             // Log the interactive message structure for debugging
             console.log('Interactive message received:', JSON.stringify(message.interactive));
