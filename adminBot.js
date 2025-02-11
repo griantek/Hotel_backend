@@ -358,7 +358,7 @@ async function handleServiceResponse(action, serviceId, bookingId) {
         await sendWhatsAppTextMessage(userPhone, message);
 
         // Confirm to admin
-        await sendWhatsAppTextMessage(process.env.ADMIN_PHONE,
+        await sendWhatsAppTextMessage(process.env.ADMIN,
             `${isConfirm ? '✅' : '❌'} ${service.category} request for Room ${booking.room_number} has been ${status}.`
         );
 
