@@ -397,6 +397,36 @@ async function updateServiceRequest(serviceId, bookingId, status) {
     });
 }
 
+// Add these new helper functions
+async function getBookingById(bookingId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT b.*, u.phone as user_phone, u.name as user_name 
+             FROM bookings b 
+             JOIN users u ON b.user_id = u.id 
+             WHERE b.id = ?`,
+            [bookingId],
+            (err, booking) => {
+                if (err) reject(err);
+                resolve(booking);
+            }
+        );
+    });
+}
+
+async function getUserPhone(userId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            'SELECT phone FROM users WHERE id = ?',
+            [userId],
+            (err, user) => {
+                if (err) reject(err);
+                resolve(user ? user.phone : null);
+            }
+        );
+    });
+}
+
 // Enhanced message sending functions
 async function sendDashboardSummary(phone) {
     const summary = await getDashboardSummary();
