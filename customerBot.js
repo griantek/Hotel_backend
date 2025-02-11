@@ -364,6 +364,22 @@ async function handleButtonResponse(phone, name, interactive, user) {
             await sendServiceOptions(phone, user);
             break;
 
+        case 'food_menu':
+            await sendFoodMenu(phone);
+            break;
+            
+        case 'housekeeping_menu':
+            await sendHousekeepingMenu(phone);
+            break;
+            
+        case 'amenities_menu':
+            await sendAmenitiesMenu(phone);
+            break;
+            
+        case 'maintenance_menu':
+            await sendMaintenanceMenu(phone);
+            break;
+
         default:
             await sendWhatsAppTextMessage(phone, 'I apologize, but I didn\'t understand that. Please try again.');
             break;
@@ -847,39 +863,7 @@ async function sendServiceOptions(phone, user) {
             return;
         }
 
-        // Get available services grouped by category
-        const services = await new Promise((resolve, reject) => {
-            db.all(
-                `SELECT category, id, name, description, price
-                 FROM hotel_services
-                 WHERE availability = 1
-                 ORDER BY category, name`,
-                (err, rows) => {
-                    if (err) reject(err);
-                    resolve(rows);
-                }
-            );
-        });
-
-        // Group services by category
-        const servicesByCategory = {};
-        services.forEach(service => {
-            if (!servicesByCategory[service.category]) {
-                servicesByCategory[service.category] = [];
-            }
-            servicesByCategory[service.category].push(service);
-        });
-
-        // Create sections for the list message
-        const sections = Object.entries(servicesByCategory).map(([category, services]) => ({
-            title: category,
-            rows: services.map(service => ({
-                id: `service_${service.id}`,
-                title: service.name,
-                description: service.description + (service.price ? ` - $${service.price}` : '')
-            }))
-        }));
-
+        // First send main categories
         await sendWhatsAppMessage(phone, {
             interactive: {
                 type: "list",
@@ -888,17 +872,44 @@ async function sendServiceOptions(phone, user) {
                     text: "Hotel Services"
                 },
                 body: {
-                    text: `Hello! Please select a service you'd like to request:`
+                    text: "Please select a service category:"
                 },
                 footer: {
                     text: "Available 24/7"
                 },
                 action: {
-                    button: "View Services",
-                    sections: sections
+                    button: "View Categories",
+                    sections: [
+                        {
+                            title: "Available Services",
+                            rows: [
+                                {
+                                    id: "food_menu",
+                                    title: "Food & Beverages",
+                                    description: "Room service, dining options"
+                                },
+                                {
+                                    id: "housekeeping_menu",
+                                    title: "Housekeeping",
+                                    description: "Room cleaning, laundry, etc"
+                                },
+                                {
+                                    id: "amenities_menu",
+                                    title: "Room Amenities",
+                                    description: "Extra items and supplies"
+                                },
+                                {
+                                    id: "maintenance_menu",
+                                    title: "Maintenance",
+                                    description: "Technical support and fixes"
+                                }
+                            ]
+                        }
+                    ]
                 }
             }
         });
+
     } catch (error) {
         console.error('Error sending service options:', error);
         await sendWhatsAppTextMessage(phone, 
@@ -921,6 +932,151 @@ async function getActiveCheckedInBooking(userId) {
             (err, booking) => {
                 if (err) reject(err);
                 resolve(booking);
+            }
+        );
+    });
+}
+
+async function sendFoodMenu(phone) {
+    try {
+        const foodServices = await getServicesByCategory('Food');
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Food & Beverages"
+                },
+                body: {
+                    text: "Select an item to order:"
+                },
+                action: {
+                    button: "View Menu",
+                    sections: [{
+                        title: "Available Items",
+                        rows: foodServices.map(service => ({
+                            id: `service_${service.id}`,
+                            title: service.name,
+                            description: service.description + (service.price ? ` - $${service.price}` : '')
+                        }))
+                    }]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending food menu:', error);
+        throw error;
+    }
+}
+
+async function sendHousekeepingMenu(phone) {
+    try {
+        const housekeepingServices = await getServicesByCategory('Housekeeping');
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Housekeeping Services"
+                },
+                body: {
+                    text: "Select a service to request:"
+                },
+                action: {
+                    button: "View Services",
+                    sections: [{
+                        title: "Available Services",
+                        rows: housekeepingServices.map(service => ({
+                            id: `service_${service.id}`,
+                            title: service.name,
+                            description: service.description + (service.price ? ` - $${service.price}` : '')
+                        }))
+                    }]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending housekeeping menu:', error);
+        throw error;
+    }
+}
+
+async function sendAmenitiesMenu(phone) {
+    try {
+        const amenityServices = await getServicesByCategory('Amenities');
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Room Amenities"
+                },
+                body: {
+                    text: "Select an amenity to request:"
+                },
+                action: {
+                    button: "View Amenities",
+                    sections: [{
+                        title: "Available Items",
+                        rows: amenityServices.map(service => ({
+                            id: `service_${service.id}`,
+                            title: service.name,
+                            description: service.description + (service.price ? ` - $${service.price}` : '')
+                        }))
+                    }]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending amenities menu:', error);
+        throw error;
+    }
+}
+
+async function sendMaintenanceMenu(phone) {
+    try {
+        const maintenanceServices = await getServicesByCategory('Maintenance');
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "list",
+                header: {
+                    type: "text",
+                    text: "Maintenance Services"
+                },
+                body: {
+                    text: "Select an issue to report:"
+                },
+                action: {
+                    button: "View Services",
+                    sections: [{
+                        title: "Available Services",
+                        rows: maintenanceServices.map(service => ({
+                            id: `service_${service.id}`,
+                            title: service.name,
+                            description: service.description + (service.price ? ` - $${service.price}` : '')
+                        }))
+                    }]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error sending maintenance menu:', error);
+        throw error;
+    }
+}
+
+// Add this helper function to get services by category
+async function getServicesByCategory(category) {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT id, name, description, price 
+             FROM hotel_services 
+             WHERE category = ? AND availability = 1 
+             ORDER BY name`,
+            [category],
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
             }
         );
     });
