@@ -1104,9 +1104,15 @@ async function handleServiceRequest(phone, user, serviceId) {
         const userMessage = getServiceRequestAcknowledgment(service.category);
         await sendWhatsAppTextMessage(phone, userMessage);
 
-        // Send notification to admin
+        // Get admin phone from environment variable
+        const adminPhone = process.env.ADMIN;
+        if (!adminPhone) {
+            throw new Error('Admin phone number not configured');
+        }
+
+        // Format and send notification to admin
         const adminMessage = formatAdminServiceNotification(service, user.name, booking.room_number);
-        await sendAdminServiceNotification(process.env.ADMIN_PHONE, adminMessage, serviceId, booking.id);
+        await sendAdminServiceNotification(adminPhone, adminMessage, serviceId, booking.id);
 
     } catch (error) {
         console.error('Error handling service request:', error);
@@ -1155,32 +1161,42 @@ function formatAdminServiceNotification(service, guestName, roomNumber) {
 }
 
 async function sendAdminServiceNotification(adminPhone, message, serviceId, bookingId) {
-    await sendWhatsAppMessage(adminPhone, {
-        interactive: {
-            type: "button",
-            body: {
-                text: message
-            },
-            action: {
-                buttons: [
-                    {
-                        type: "reply",
-                        reply: {
-                            id: `confirm_service_${serviceId}_${bookingId}`,
-                            title: "Confirm"
+    try {
+        // Add 'to' parameter in the request body
+        await sendWhatsAppMessage(adminPhone, {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: adminPhone, // Add this line to fix the error
+            type: "interactive",
+            interactive: {
+                type: "button",
+                body: {
+                    text: message
+                },
+                action: {
+                    buttons: [
+                        {
+                            type: "reply",
+                            reply: {
+                                id: `confirm_service_${serviceId}_${bookingId}`,
+                                title: "Confirm"
+                            }
+                        },
+                        {
+                            type: "reply",
+                            reply: {
+                                id: `decline_service_${serviceId}_${bookingId}`,
+                                title: "Decline"
+                            }
                         }
-                    },
-                    {
-                        type: "reply",
-                        reply: {
-                            id: `decline_service_${serviceId}_${bookingId}`,
-                            title: "Decline"
-                        }
-                    }
-                ]
+                    ]
+                }
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Error sending admin notification:', error);
+        throw error;
+    }
 }
 
 // Add to the service response messages object
