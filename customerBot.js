@@ -1089,7 +1089,7 @@ async function getServicesByCategory(category) {
     });
 }
 
-// Add new helper functions
+// Update handleServiceRequest function to be simpler
 async function handleServiceRequest(phone, user, serviceId) {
     try {
         const booking = await getActiveCheckedInBooking(user.id);
@@ -1100,19 +1100,9 @@ async function handleServiceRequest(phone, user, serviceId) {
             return;
         }
 
-        // Send acknowledgment to user
-        const userMessage = getServiceRequestAcknowledgment(service.category);
-        await sendWhatsAppTextMessage(phone, userMessage);
-
-        // Get admin phone from environment variable
-        const adminPhone = process.env.ADMIN;
-        if (!adminPhone) {
-            throw new Error('Admin phone number not configured');
-        }
-
-        // Format and send notification to admin
-        const adminMessage = formatAdminServiceNotification(service, user.name, booking.room_number);
-        await sendAdminServiceNotification(adminPhone, adminMessage, serviceId, booking.id);
+        // Send immediate confirmation to user
+        const message = getServiceConfirmationMessage(service.category, service.name);
+        await sendWhatsAppTextMessage(phone, message);
 
     } catch (error) {
         console.error('Error handling service request:', error);
@@ -1122,119 +1112,16 @@ async function handleServiceRequest(phone, user, serviceId) {
     }
 }
 
-async function getServiceById(id) {
-    return new Promise((resolve, reject) => {
-        db.get(
-            `SELECT * FROM hotel_services WHERE id = ?`,
-            [id],
-            (err, service) => {
-                if (err) reject(err);
-                resolve(service);
-            }
-        );
-    });
-}
-
-function getServiceRequestAcknowledgment(category) {
-    const acknowledgments = {
-        'Food': '🍽️ Please wait while we confirm your order...',
-        'Housekeeping': '🧹 Please wait while we process your housekeeping request...',
-        'Amenities': '🛄 Please wait while we process your amenity request...',
-        'Maintenance': '🔧 Please wait while we process your maintenance request...'
+// Add new helper function for service confirmation messages
+function getServiceConfirmationMessage(category, serviceName) {
+    const messages = {
+        'Food': `✅ Thank you for your order of ${serviceName}. Our kitchen staff will prepare and deliver your meal shortly.`,
+        'Housekeeping': `✅ Your request for ${serviceName} has been received. Our housekeeping staff will attend to your room shortly.`,
+        'Amenities': `✅ Your request for ${serviceName} has been received. Our staff will deliver it to your room shortly.`,
+        'Maintenance': `✅ Your ${serviceName} request has been logged. Our maintenance team will assist you shortly.`
     };
-    return acknowledgments[category] || 'Please wait while we process your request...';
+    return messages[category] || `✅ Your request for ${serviceName} has been received. Our staff will assist you shortly.`;
 }
-
-function formatAdminServiceNotification(service, guestName, roomNumber) {
-    const icons = {
-        'Food': '🍽️',
-        'Housekeeping': '🧹',
-        'Amenities': '🛄',
-        'Maintenance': '🔧'
-    };
-
-    return `🔔 New ${service.category} Request!\n\n` +
-           `Guest: ${guestName} (Room ${roomNumber})\n` +
-           `Requested: ${service.name} ${icons[service.category]}\n` +
-           `Time: ${moment().format('h:mm A')}` +
-           (service.price ? `\nPrice: $${service.price}` : '');
-}
-
-async function sendAdminServiceNotification(adminPhone, message, serviceId, bookingId) {
-    try {
-        // Add 'to' parameter in the request body
-        await sendWhatsAppMessage(adminPhone, {
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: adminPhone, // Add this line to fix the error
-            type: "interactive",
-            interactive: {
-                type: "button",
-                body: {
-                    text: message
-                },
-                action: {
-                    buttons: [
-                        {
-                            type: "reply",
-                            reply: {
-                                id: `confirm_service_${serviceId}_${bookingId}`,
-                                title: "Confirm"
-                            }
-                        },
-                        {
-                            type: "reply",
-                            reply: {
-                                id: `decline_service_${serviceId}_${bookingId}`,
-                                title: "Decline"
-                            }
-                        }
-                    ]
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Error sending admin notification:', error);
-        throw error;
-    }
-}
-
-// Add to the service response messages object
-const serviceResponseMessages = {
-    Food: {
-        confirm: (serviceName) => 
-            `✅ Your order for ${serviceName} has been confirmed.\n` +
-            `Our team is preparing your meal.\n` +
-            `Estimated delivery: 30 minutes`,
-        decline: (serviceName) =>
-            `❌ We apologize, but we are unable to process your order for ${serviceName} at this time.\n` +
-            `Please contact front desk for alternatives.`
-    },
-    Housekeeping: {
-        confirm: (serviceName) =>
-            `✅ Your ${serviceName} request has been confirmed.\n` +
-            `Our housekeeping staff will arrive within 15 minutes.`,
-        decline: (serviceName) =>
-            `❌ We apologize, but we are unable to provide ${serviceName} at this moment.\n` +
-            `Please try again in 30 minutes.`
-    },
-    Amenities: {
-        confirm: (serviceName) =>
-            `✅ Your request for ${serviceName} has been confirmed.\n` +
-            `Items will be delivered to your room within 10 minutes.`,
-        decline: (serviceName) =>
-            `❌ We apologize, but ${serviceName} is currently unavailable.\n` +
-            `Please contact front desk for alternatives.`
-    },
-    Maintenance: {
-        confirm: (serviceName) =>
-            `✅ Your ${serviceName} request has been confirmed.\n` +
-            `Our maintenance team will arrive within 20 minutes.`,
-        decline: (serviceName) =>
-            `❌ We apologize for the delay. Our maintenance team is currently handling other requests.\n` +
-            `We will prioritize your request for ${serviceName} as soon as possible.`
-    }
-};
 
 // Add to database schema
 db.run(`CREATE TABLE IF NOT EXISTS service_requests (
