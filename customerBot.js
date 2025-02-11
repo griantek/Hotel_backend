@@ -1089,6 +1089,20 @@ async function getServicesByCategory(category) {
     });
 }
 
+// Add this helper function to get service details
+async function getServiceById(id) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT * FROM hotel_services WHERE id = ?`,
+            [id],
+            (err, service) => {
+                if (err) reject(err);
+                resolve(service);
+            }
+        );
+    });
+}
+
 // Update handleServiceRequest function to be simpler
 async function handleServiceRequest(phone, user, serviceId) {
     try {
