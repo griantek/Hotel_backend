@@ -1054,44 +1054,65 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
 });
 
 // Add helper function to send welcome message
+// async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
+//   try {
+//     // Get available services
+//     const services = await new Promise((resolve, reject) => {
+//       db.all(
+//         `SELECT category, GROUP_CONCAT(name, ': ' || description) as services
+//          FROM hotel_services
+//          WHERE availability = 1
+//          GROUP BY category`,
+//         (err, rows) => {
+//           if (err) reject(err);
+//           resolve(rows);
+//         }
+//       );
+//     });
+
+//     // Format services message
+//     let servicesText = "\n\nOur Available Services:";
+//     services.forEach(category => {
+//       servicesText += `\n\n*${category.category}*:\n`;
+//       category.services.split(',').forEach(service => {
+//         servicesText += `• ${service.trim()}\n`;
+//       });
+//     });
+
+//     const welcomeMessage = 
+//       `🎉 Welcome to your room ${guestName}! 🎉\n\n` +
+//       `We're delighted to have you with us. Your room number is: *${roomNumber}*\n` +
+//       `To request any service, simply type "services" in this chat.${servicesText}\n\n` +
+//       `For immediate assistance, please contact our front desk by dialing *0* from your room phone.\n\n` +
+//       `We hope you have a wonderful stay with us! 🌟`;
+
+//     await sendWhatsAppMessage(phone, welcomeMessage);
+//   } catch (error) {
+//     console.error('Error sending welcome message:', error);
+//   }
+// }
+
 async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
   try {
-    // Get available services
-    const services = await new Promise((resolve, reject) => {
-      db.all(
-        `SELECT category, GROUP_CONCAT(name, ': ' || description) as services
-         FROM hotel_services
-         WHERE availability = 1
-         GROUP BY category`,
-        (err, rows) => {
-          if (err) reject(err);
-          resolve(rows);
-        }
-      );
-    });
+      const welcomeMessage = 
+          `🎉 Welcome ${guestName}!\n\n` +
+          `Your Room: *${roomNumber}*\n\n` +
+          `Quick Guide:\n` +
+          `• Type "services" - Request room service/amenities\n` +
+          `• Type "menu" - View restaurant menu\n` +
+          `• Type "help" - Get assistance\n` +
+          `• Dial *0* - Contact front desk\n\n` +
+          `Meal Times:\n` +
+          `🍳 Breakfast: 6:30-10:30 AM\n` +
+          `🍽️ Lunch: 12:00-3:00 PM\n` +
+          `🍴 Dinner: 6:30-11:00 PM\n\n` +
+          `We'll send you timely reminders for meals and other services. Enjoy your stay! 🌟`;
 
-    // Format services message
-    let servicesText = "\n\nOur Available Services:";
-    services.forEach(category => {
-      servicesText += `\n\n*${category.category}*:\n`;
-      category.services.split(',').forEach(service => {
-        servicesText += `• ${service.trim()}\n`;
-      });
-    });
-
-    const welcomeMessage = 
-      `🎉 Welcome to your room ${guestName}! 🎉\n\n` +
-      `We're delighted to have you with us. Your room number is: *${roomNumber}*\n` +
-      `To request any service, simply type "services" in this chat.${servicesText}\n\n` +
-      `For immediate assistance, please contact our front desk by dialing *0* from your room phone.\n\n` +
-      `We hope you have a wonderful stay with us! 🌟`;
-
-    await sendWhatsAppMessage(phone, welcomeMessage);
+      await sendWhatsAppTextMessage(phone, welcomeMessage);
   } catch (error) {
-    console.error('Error sending welcome message:', error);
+      console.error('Error sending welcome message:', error);
   }
 }
-
 // Add new endpoint to get room types
 // Update room-types endpoint to include photos
 // Fix the room-types endpoint
