@@ -1149,6 +1149,187 @@ db.run(`CREATE TABLE IF NOT EXISTS service_requests (
     FOREIGN KEY (service_id) REFERENCES hotel_services (id)
 )`);
 
+// Add new helper function to get meal times
+async function getMealTimes() {
+    return new Promise((resolve, reject) => {
+        db.all(
+            `SELECT service_name, 
+                    time(start_time) as start_time, 
+                    time(end_time) as end_time 
+             FROM service_schedules 
+             WHERE service_category = 'Food' 
+             AND active = 1
+             ORDER BY start_time`,
+            (err, rows) => {
+                if (err) reject(err);
+                resolve(rows);
+            }
+        );
+    });
+}
+
+// Update sendCheckinWelcomeMessage function
+async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
+    try {
+        // Get meal times from database
+        const mealTimes = await getMealTimes();
+        let mealTimesText = "\nMeal Times:";
+        const mealEmojis = { 'Breakfast': '🍳', 'Lunch': '🍽️', 'Dinner': '🍴' };
+        
+        mealTimes.forEach(meal => {
+            const startTime = formatTimeTo12Hour(meal.start_time);
+            const endTime = formatTimeTo12Hour(meal.end_time);
+            mealTimesText += `\n${mealEmojis[meal.service_name] || ''} ${meal.service_name}: ${startTime}-${endTime}`;
+        });
+
+        const welcomeMessage = 
+            `🎉 Welcome ${guestName}!\n\n` +
+            `Your Room: *${roomNumber}*\n\n` +
+            `Quick Guide:\n` +
+            `• Type "services" - Request room service/amenities\n` +
+            `• Type "menu" - View restaurant menu\n` +
+            `• Type "help" - Get assistance\n` +
+            `• Dial *0* - Contact front desk\n` +
+            mealTimesText + `\n\n` +
+            `We'll send you timely reminders for meals and other services. Enjoy your stay! 🌟`;
+
+        await sendWhatsAppTextMessage(phone, welcomeMessage);
+        
+        // Schedule immediate service reminder if applicable
+        await scheduleImmediateServiceReminder(phone, roomNumber);
+    } catch (error) {
+        console.error('Error sending welcome message:', error);
+    }
+}
+
+// Add new function to check and send immediate service reminder
+async function scheduleImmediateServiceReminder(phone, roomNumber) {
+    const now = moment();
+    const currentTime = now.format('HH:mm:ss');
+
+    try {
+        // Get current active service
+        const activeService = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM service_schedules 
+                 WHERE time(?) BETWEEN time(start_time) AND time(end_time)
+                 AND active = 1`,
+                [currentTime],
+                (err, row) => {
+                    if (err) reject(err);
+                    resolve(row);
+                }
+            );
+        });
+
+        if (activeService) {
+            // Get booking ID for the room
+            const booking = await new Promise((resolve, reject) => {
+                db.get(
+                    `SELECT id FROM bookings 
+                     WHERE room_number = ? 
+                     AND checkin_status = 'checked_in'
+                     AND status = 'confirmed'`,
+                    [roomNumber],
+                    (err, row) => {
+                        if (err) reject(err);
+                        resolve(row);
+                    }
+                );
+            });
+
+            // Check if reminder already sent
+            const reminderSent = await checkReminderSent(booking.id, activeService.id);
+            
+            if (!reminderSent) {
+                await sendWhatsAppTextMessage(phone, activeService.message_template);
+                await recordReminderSent(booking.id, activeService.id);
+            }
+        }
+    } catch (error) {
+        console.error('Error scheduling immediate service reminder:', error);
+    }
+}
+
+// Add helper functions for reminder tracking
+async function checkReminderSent(bookingId, serviceId) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT 1 FROM service_reminders_sent 
+             WHERE booking_id = ? AND service_id = ?`,
+            [bookingId, serviceId],
+            (err, row) => {
+                if (err) reject(err);
+                resolve(!!row);
+            }
+        );
+    });
+}
+
+async function recordReminderSent(bookingId, serviceId) {
+    return new Promise((resolve, reject) => {
+        db.run(
+            `INSERT INTO service_reminders_sent (booking_id, service_id) 
+             VALUES (?, ?)`,
+            [bookingId, serviceId],
+            err => {
+                if (err) reject(err);
+                resolve();
+            }
+        );
+    });
+}
+
+// Add scheduled task to send service reminders
+schedule.scheduleJob('* * * * *', async function() {
+    const currentTime = moment().format('HH:mm:00');
+    
+    try {
+        // Get active service for current time
+        const activeService = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM service_schedules 
+                 WHERE time(start_time) = time(?)
+                 AND active = 1`,
+                [currentTime],
+                (err, row) => {
+                    if (err) reject(err);
+                    resolve(row);
+                }
+            );
+        });
+
+        if (activeService) {
+            // Get all checked-in guests
+            const activeBookings = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT b.id, b.room_number, u.phone 
+                     FROM bookings b
+                     JOIN users u ON b.user_id = u.id
+                     WHERE b.checkin_status = 'checked_in'
+                     AND b.status = 'confirmed'`,
+                    [],
+                    (err, rows) => {
+                        if (err) reject(err);
+                        resolve(rows);
+                    }
+                );
+            });
+
+            // Send reminders to each guest
+            for (const booking of activeBookings) {
+                const reminderSent = await checkReminderSent(booking.id, activeService.id);
+                if (!reminderSent) {
+                    await sendWhatsAppTextMessage(booking.phone, activeService.message_template);
+                    await recordReminderSent(booking.id, activeService.id);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error in service reminder scheduler:', error);
+    }
+});
+
 // Start server
 module.exports = {
     handleMessage: async (body) => {

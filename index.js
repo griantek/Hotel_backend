@@ -146,6 +146,26 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  db.run(`CREATE TABLE IF NOT EXISTS service_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_category TEXT NOT NULL,
+    service_name TEXT NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    message_template TEXT NOT NULL,
+    active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS service_reminders_sent (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    service_id INTEGER NOT NULL,
+    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (booking_id) REFERENCES bookings(id),
+    FOREIGN KEY (service_id) REFERENCES service_schedules(id)
+  )`);
+
   // Insert default services if not exists
   db.get('SELECT COUNT(*) as count FROM hotel_services', [], (err, row) => {
     if (row.count === 0) {
@@ -1094,6 +1114,17 @@ app.patch('/api/admin/bookings/:id/update', authenticateAdmin, async (req, res) 
 
 async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
   try {
+      // Get meal times from database
+      const mealTimes = await getMealTimes();
+      let mealTimesText = "\nMeal Times:";
+      const mealEmojis = { 'Breakfast': '🍳', 'Lunch': '🍽️', 'Dinner': '🍴' };
+      
+      mealTimes.forEach(meal => {
+          const startTime = formatTimeTo12Hour(meal.start_time);
+          const endTime = formatTimeTo12Hour(meal.end_time);
+          mealTimesText += `\n${mealEmojis[meal.service_name] || ''} ${meal.service_name}: ${startTime}-${endTime}`;
+      });
+
       const welcomeMessage = 
           `🎉 Welcome ${guestName}!\n\n` +
           `Your Room: *${roomNumber}*\n\n` +
@@ -1101,17 +1132,112 @@ async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
           `• Type "services" - Request room service/amenities\n` +
           `• Type "menu" - View restaurant menu\n` +
           `• Type "help" - Get assistance\n` +
-          `• Dial *0* - Contact front desk\n\n` +
-          `Meal Times:\n` +
-          `🍳 Breakfast: 6:30-10:30 AM\n` +
-          `🍽️ Lunch: 12:00-3:00 PM\n` +
-          `🍴 Dinner: 6:30-11:00 PM\n\n` +
+          `• Dial *0* - Contact front desk\n` +
+          mealTimesText + `\n\n` +
           `We'll send you timely reminders for meals and other services. Enjoy your stay! 🌟`;
 
       await sendWhatsAppMessage(phone, welcomeMessage);
+      
+      // Schedule immediate service reminder if applicable
+      await scheduleImmediateServiceReminder(phone, roomNumber);
   } catch (error) {
       console.error('Error sending welcome message:', error);
   }
+}
+
+// Add new function to check and send immediate service reminder
+async function scheduleImmediateServiceReminder(phone, roomNumber) {
+    const now = moment();
+    const currentTime = now.format('HH:mm:ss');
+
+    try {
+        // Get current active service
+        const activeService = await new Promise((resolve, reject) => {
+            db.get(
+                `SELECT * FROM service_schedules 
+                 WHERE time(?) BETWEEN time(start_time) AND time(end_time)
+                 AND active = 1`,
+                [currentTime],
+                (err, row) => {
+                    if (err) reject(err);
+                    resolve(row);
+                }
+            );
+        });
+
+        if (activeService) {
+            // Get booking ID for the room
+            const booking = await new Promise((resolve, reject) => {
+                db.get(
+                    `SELECT id FROM bookings 
+                     WHERE room_number = ? 
+                     AND checkin_status = 'checked_in'
+                     AND status = 'confirmed'`,
+                    [roomNumber],
+                    (err, row) => {
+                        if (err) reject(err);
+                        resolve(row);
+                    }
+                );
+            });
+
+            // Check if reminder already sent
+            const reminderSent = await checkReminderSent(booking.id, activeService.id);
+            
+            if (!reminderSent) {
+                await sendWhatsAppMessage(phone, activeService.message_template);
+                await recordReminderSent(booking.id, activeService.id);
+            }
+        }
+    } catch (error) {
+        console.error('Error scheduling immediate service reminder:', error);
+    }
+}
+
+async function recordReminderSent(bookingId, serviceId) {
+  return new Promise((resolve, reject) => {
+      db.run(
+          `INSERT INTO service_reminders_sent (booking_id, service_id) 
+           VALUES (?, ?)`,
+          [bookingId, serviceId],
+          err => {
+              if (err) reject(err);
+              resolve();
+          }
+      );
+  });
+}
+// Add helper functions for reminder tracking
+async function checkReminderSent(bookingId, serviceId) {
+  return new Promise((resolve, reject) => {
+      db.get(
+          `SELECT 1 FROM service_reminders_sent 
+           WHERE booking_id = ? AND service_id = ?`,
+          [bookingId, serviceId],
+          (err, row) => {
+              if (err) reject(err);
+              resolve(!!row);
+          }
+      );
+  });
+}
+
+async function getMealTimes() {
+  return new Promise((resolve, reject) => {
+      db.all(
+          `SELECT service_name, 
+                  time(start_time) as start_time, 
+                  time(end_time) as end_time 
+           FROM service_schedules 
+           WHERE service_category = 'Food' 
+           AND active = 1
+           ORDER BY start_time`,
+          (err, rows) => {
+              if (err) reject(err);
+              resolve(rows);
+          }
+      );
+  });
 }
 // Add new endpoint to get room types
 // Update room-types endpoint to include photos
