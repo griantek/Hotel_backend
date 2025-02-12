@@ -2,7 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 const cron = require('node-cron');
-const moment = require('moment');
+const moment = require('moment-timezone');  // Update to moment-timezone
 const cors = require('cors');
 const schedule = require('node-schedule');
 require('dotenv').config();
@@ -17,6 +17,9 @@ const db = new sqlite3.Database('hotel.db');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN
+
+// Set default timezone
+moment.tz.setDefault('Asia/Kolkata');
 
 // Add root route
 app.get('/', (req, res) => {
