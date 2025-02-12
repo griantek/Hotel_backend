@@ -1108,7 +1108,7 @@ async function sendCheckinWelcomeMessage(phone, guestName, roomNumber) {
           `🍴 Dinner: 6:30-11:00 PM\n\n` +
           `We'll send you timely reminders for meals and other services. Enjoy your stay! 🌟`;
 
-      await sendWhatsAppTextMessage(phone, welcomeMessage);
+      await sendWhatsAppMessage(phone, welcomeMessage);
   } catch (error) {
       console.error('Error sending welcome message:', error);
   }
