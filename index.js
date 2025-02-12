@@ -1450,6 +1450,112 @@ app.get('/admin/feedback', authenticateAdmin, (req, res) => {
   );
 });
 
+// Modify the scheduler to run every minute and handle all time-based service reminders
+cron.schedule('* * * * *', async function() {
+  console.log('Running service reminder check:', moment().tz('Asia/Kolkata').format('YYYY-MM-DD HH:mm:ss'));
+  
+  const currentTime = moment().tz('Asia/Kolkata').format('HH:mm:00');
+  
+  try {
+      // Get all active services for current time window
+      const activeServices = await new Promise((resolve, reject) => {
+          db.all(
+              `SELECT * FROM service_schedules 
+               WHERE (
+                  -- Exact time match for start time
+                  time(?) = time(start_time)
+                  OR
+                  -- Check if current time falls within any active service window for new check-ins
+                  time(?) BETWEEN time(start_time) AND time(end_time)
+               )
+               AND active = 1`,
+              [currentTime, currentTime],
+              (err, rows) => {
+                  if (err) reject(err);
+                  resolve(rows);
+              }
+          );
+      });
+
+      if (activeServices && activeServices.length > 0) {
+          console.log(`Found ${activeServices.length} active services`);
+          
+          // Get all currently checked-in guests
+          const activeBookings = await new Promise((resolve, reject) => {
+              db.all(
+                  `SELECT b.id, b.room_number, b.check_in_date, u.phone, u.name as guest_name
+                   FROM bookings b
+                   JOIN users u ON b.user_id = u.id
+                   WHERE b.checkin_status = 'checked_in'
+                   AND b.status = 'confirmed'
+                   AND b.check_out_date >= date('now')`,
+                  [],
+                  (err, rows) => {
+                      if (err) reject(err);
+                      resolve(rows);
+                  }
+              );
+          });
+
+          console.log(`Found ${activeBookings.length} active checked-in guests`);
+
+          // Process each service for each active booking
+          for (const service of activeServices) {
+              for (const booking of activeBookings) {
+                  try {
+                      const isStartTime = moment(currentTime, 'HH:mm:ss')
+                          .isSame(moment(service.start_time, 'HH:mm:ss'));
+                      
+                      const isNewCheckin = moment(booking.check_in_date).isSame(moment(), 'day') &&
+                          moment(currentTime, 'HH:mm:ss')
+                              .isBetween(
+                                  moment(service.start_time, 'HH:mm:ss'),
+                                  moment(service.end_time, 'HH:mm:ss')
+                              );
+
+                      // Check if reminder already sent today
+                      const reminderSent = await checkReminderSentToday(booking.id, service.id);
+                      
+                      if (!reminderSent && (isStartTime || isNewCheckin)) {
+                          // Send reminder
+                          await sendWhatsAppMessage(
+                              booking.phone, 
+                              `Dear ${booking.guest_name}, ${service.message_template}`
+                          );
+                          
+                          // Record the reminder
+                          await recordReminderSent(booking.id, service.id);
+                          
+                          console.log(`Sent ${service.service_name} reminder to Room ${booking.room_number}`);
+                      }
+                  } catch (error) {
+                      console.error(`Error processing reminder for booking ${booking.id}:`, error);
+                  }
+              }
+          }
+      }
+  } catch (error) {
+      console.error('Error in service reminder scheduler:', error);
+  }
+});
+
+// Add new helper function to check if reminder was sent today
+async function checkReminderSentToday(bookingId, serviceId) {
+  return new Promise((resolve, reject) => {
+      db.get(
+          `SELECT 1 FROM service_reminders_sent 
+           WHERE booking_id = ? 
+           AND service_id = ?
+           AND date(sent_at) = date('now')`,
+          [bookingId, serviceId],
+          (err, row) => {
+              if (err) reject(err);
+              resolve(!!row);
+          }
+      );
+  });
+}
+
 const PORT =  4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
