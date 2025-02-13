@@ -1474,33 +1474,54 @@ async function sendIdTypeSelection(phone) {
 }
 
 async function handleIdTypeSelection(phone, idType) {
-    const booking = await getActiveBooking(phone);
-    if (!booking) {
-        await sendWhatsAppTextMessage(phone, "No active booking found.");
-        return;
-    }
-
-    await db.run(
-        'UPDATE bookings SET selected_id_type = ?, verification_status = ? WHERE id = ?',
-        [idType, 'pending', booking.id]
-    );
-
-    await sendWhatsAppTextMessage(
-        phone,
-        `Please upload a clear photo of your ${idType}.\n\n` +
-        "Ensure that:\n" +
-        "✅ All text is clearly visible\n" +
-        "✅ The entire ID is in frame\n" +
-        "✅ There's good lighting\n" +
-        "✅ No glare or reflections\n\n" +
-                [booking.id]
-            );
-            await sendWhatsAppTextMessage(
-                phone,
-                "ID verification request has expired. Please select ID type again to restart the process."
-            );
+    try {
+        const booking = await getActiveBooking(phone);
+        if (!booking) {
+            await sendWhatsAppTextMessage(phone, "No active booking found.");
+            return;
         }
-    }, 5 * 60 * 1000); // 5 minutes timeout
+
+        await db.run(
+            'UPDATE bookings SET selected_id_type = ?, verification_status = ? WHERE id = ?',
+            [idType, 'pending', booking.id]
+        );
+
+        await sendWhatsAppTextMessage(
+            phone,
+            `Please upload a clear photo of your ${idType}.\n\n` +
+            "Ensure that:\n" +
+            "✅ All text is clearly visible\n" +
+            "✅ The entire ID is in frame\n" +
+            "✅ There's good lighting\n" +
+            "✅ No glare or reflections\n\n" +
+            "⚠️ This request will expire in 5 minutes for security purposes."
+        );
+
+        // Set timeout to clear verification status if not completed
+        setTimeout(async () => {
+            try {
+                const currentBooking = await getActiveBooking(phone);
+                if (currentBooking?.verification_status === 'pending') {
+                    await db.run(
+                        'UPDATE bookings SET selected_id_type = NULL, verification_status = "expired" WHERE id = ?',
+                        [booking.id]
+                    );
+                    await sendWhatsAppTextMessage(
+                        phone,
+                        "ID verification request has expired. Please select ID type again to restart the process."
+                    );
+                }
+            } catch (error) {
+                console.error('Error in timeout handler:', error);
+            }
+        }, 5 * 60 * 1000); // 5 minutes timeout
+    } catch (error) {
+        console.error('Error handling ID type selection:', error);
+        await sendWhatsAppTextMessage(
+            phone,
+            "Sorry, there was an error processing your ID type selection. Please try again."
+        );
+    }
 }
 
 async function requestPayment(phone, booking) {
