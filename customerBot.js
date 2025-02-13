@@ -8,6 +8,8 @@ require('dotenv').config();
 const app = express();
 app.use(bodyParser.json());
 const moment = require('moment');
+const path = require('path');
+const fs = require('fs').promises;
 
 // Database connection
 const db = new sqlite3.Database('hotel.db');
@@ -132,7 +134,6 @@ async function handleIncomingMessage(phone, message, name) {
             await handleButtonResponse(phone, userName, message.interactive, user);
         } else if (message.type === 'image') {
             try {
-                // Check if we're expecting an ID verification
                 const pendingVerification = await getActiveBooking(phone);
                 
                 if (!pendingVerification || 

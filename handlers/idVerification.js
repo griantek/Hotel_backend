@@ -55,13 +55,21 @@ class AadhaarVerifier {
 
 async function verifyID(imagePath, idType, bookingId, db) {
   try {
+    console.log('Starting ID verification for:', { imagePath, idType, bookingId });
+    
     if (!imagePath) {
       throw new Error('Image path is required');
     }
 
-    console.log('Processing image:', imagePath);
+    try {
+      await fs.access(imagePath);
+    } catch (error) {
+      throw new Error(`File not found at path: ${imagePath}`);
+    }
 
-    // Perform OCR directly on the file
+    console.log('Processing image at path:', imagePath);
+
+    // Perform OCR
     const result = await tesseract.recognize(imagePath, {
       lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
     });
@@ -70,12 +78,13 @@ async function verifyID(imagePath, idType, bookingId, db) {
 
     // Extract information based on ID type
     let extractedInfo;
-    switch (idType) {
+    switch (idType.toLowerCase()) {
       case 'aadhar':
         extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
         break;
+      // Add other ID types here
       default:
-        throw new Error('Unsupported ID type');
+        throw new Error('Unsupported ID type: ' + idType);
     }
 
     // Validate extracted info
@@ -86,23 +95,25 @@ async function verifyID(imagePath, idType, bookingId, db) {
     // Save verification details
     await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
 
-    // Clean up temporary file
+    // Clean up temp file
     try {
-      await fs.promises.unlink(imagePath);
+      await fs.unlink(imagePath);
+      console.log('Temporary file deleted:', imagePath);
     } catch (err) {
       console.error('Error deleting temp file:', err);
     }
 
     return extractedInfo;
-
   } catch (error) {
-    console.error('Error verifying ID:', error);
-    // Clean up temporary file in case of error
+    console.error('Error in verifyID:', error);
+    
+    // Clean up temp file in case of error
     try {
-      await fs.promises.unlink(imagePath);
+      await fs.unlink(imagePath);
     } catch (err) {
-      console.error('Error deleting temp file:', err);
+      // Ignore deletion errors
     }
+    
     throw error;
   }
 }
