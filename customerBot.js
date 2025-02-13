@@ -1412,14 +1412,25 @@ const { verifyID } = require('./handlers/idVerification');
 async function handleIdVerification(phone, image, booking) {
     try {
         // Verify ID
+        const imagePath = image.url;
+        
+        // Check if file exists and wait for it to be accessible
+        try {
+            await fs.access(imagePath);
+            console.log('File exists and is accessible:', imagePath);
+        } catch (error) {
+            console.error('File access error:', error);
+            throw new Error('Image file is not accessible');
+        }
+
         const verificationResult = await verifyID(
-            image.url, 
+            imagePath, 
             booking.selected_id_type, 
             booking.id,
             db
         );
 
-        // Send verification result to user
+        // Rest of the verification handling...
         await sendWhatsAppMessage(phone, {
             interactive: {
                 type: "button",
@@ -1455,6 +1466,80 @@ async function handleIdVerification(phone, image, booking) {
         await sendWhatsAppTextMessage(phone, 
             'Sorry, there was an error verifying your ID. Please try again or contact our support.'
         );
+
+        // Clean up the file in case of error
+        try {
+            if (image.url) {
+                await fs.unlink(image.url);
+            }
+        } catch (unlinkError) {
+            console.error('Error deleting file:', unlinkError);
+        }
+    }
+}
+
+// Update getMediaUrl function
+async function getMediaUrl(mediaId) {
+    let tempFilePath = null;
+    try {
+        console.log('Getting media URL for ID:', mediaId);
+        
+        // Create uploads directory if it doesn't exist
+        const uploadDir = path.join(__dirname, 'uploads', 'temp');
+        await fs.mkdir(uploadDir, { recursive: true });
+        console.log('Upload directory created/verified:', uploadDir);
+
+        // Get media URL
+        const mediaInfoResponse = await axios.get(
+            `https://graph.facebook.com/v17.0/${mediaId}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+                }
+            }
+        );
+        
+        console.log('Media info response:', mediaInfoResponse.data);
+        
+        if (!mediaInfoResponse.data?.url) {
+            throw new Error('No media URL found in response');
+        }
+
+        // Download media file
+        const mediaResponse = await axios.get(mediaInfoResponse.data.url, {
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+            },
+            responseType: 'arraybuffer',
+            timeout: 5000
+        });
+
+        // Generate unique filename
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(7);
+        tempFilePath = path.join(uploadDir, `${timestamp}-${randomString}.jpg`);
+        
+        // Save file
+        await fs.writeFile(tempFilePath, mediaResponse.data);
+        console.log('Media file saved to:', tempFilePath);
+
+        // Verify file exists and is readable
+        await fs.access(tempFilePath, fs.constants.R_OK);
+        console.log('File verified as readable:', tempFilePath);
+
+        return tempFilePath;
+
+    } catch (error) {
+        console.error('Error getting media URL:', error);
+        // Clean up file if there was an error
+        if (tempFilePath) {
+            try {
+                await fs.unlink(tempFilePath);
+            } catch (unlinkError) {
+                console.error('Error deleting temporary file:', unlinkError);
+            }
+        }
+        return null;
     }
 }
 
@@ -1560,20 +1645,16 @@ async function completeCheckin(phone, booking) {
 
 // Add this new helper function to get permanent media URL
 async function getMediaUrl(mediaId) {
+    let tempFilePath = null;
     try {
         console.log('Getting media URL for ID:', mediaId);
         
         // Create uploads directory if it doesn't exist
         const uploadDir = path.join(__dirname, 'uploads', 'temp');
-        try {
-            await fs.mkdir(uploadDir, { recursive: true });
-            console.log('Upload directory created/verified:', uploadDir);
-        } catch (err) {
-            console.error('Error creating directory:', err);
-            throw new Error('Failed to create upload directory');
-        }
+        await fs.mkdir(uploadDir, { recursive: true });
+        console.log('Upload directory created/verified:', uploadDir);
 
-        // First get the media URL
+        // Get media URL
         const mediaInfoResponse = await axios.get(
             `https://graph.facebook.com/v17.0/${mediaId}`,
             {
@@ -1585,7 +1666,7 @@ async function getMediaUrl(mediaId) {
         
         console.log('Media info response:', mediaInfoResponse.data);
         
-        if (!mediaInfoResponse.data || !mediaInfoResponse.data.url) {
+        if (!mediaInfoResponse.data?.url) {
             throw new Error('No media URL found in response');
         }
 
@@ -1595,28 +1676,33 @@ async function getMediaUrl(mediaId) {
                 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
             },
             responseType: 'arraybuffer',
-            timeout: 5000 // 5 second timeout
+            timeout: 5000
         });
 
-        // Save to temporary file with timestamp and random string
+        // Generate unique filename
         const timestamp = Date.now();
         const randomString = Math.random().toString(36).substring(7);
-        const tempFilePath = path.join(uploadDir, `${timestamp}-${randomString}.jpg`);
+        tempFilePath = path.join(uploadDir, `${timestamp}-${randomString}.jpg`);
         
-        try {
-            await fs.writeFile(tempFilePath, mediaResponse.data);
-            console.log('Media file saved to:', tempFilePath);
-            return tempFilePath;
-        } catch (writeError) {
-            console.error('Error writing file:', writeError);
-            throw new Error('Failed to save media file');
-        }
+        // Save file
+        await fs.writeFile(tempFilePath, mediaResponse.data);
+        console.log('Media file saved to:', tempFilePath);
+
+        // Verify file exists and is readable
+        await fs.access(tempFilePath, fs.constants.R_OK);
+        console.log('File verified as readable:', tempFilePath);
+
+        return tempFilePath;
 
     } catch (error) {
         console.error('Error getting media URL:', error);
-        if (error.response) {
-            console.error('Response data:', error.response.data);
-            console.error('Response status:', error.response.status);
+        // Clean up file if there was an error
+        if (tempFilePath) {
+            try {
+                await fs.unlink(tempFilePath);
+            } catch (unlinkError) {
+                console.error('Error deleting temporary file:', unlinkError);
+            }
         }
         return null;
     }

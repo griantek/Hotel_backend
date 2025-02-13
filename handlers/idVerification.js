@@ -54,68 +54,79 @@ class AadhaarVerifier {
 }
 
 async function verifyID(imagePath, idType, bookingId, db) {
-  try {
-    console.log('Starting ID verification for:', { imagePath, idType, bookingId });
-    
-    if (!imagePath) {
-      throw new Error('Image path is required');
-    }
-
+    let fileExists = false;
     try {
-      await fs.access(imagePath);
+        console.log('Starting ID verification for:', { imagePath, idType, bookingId });
+        
+        if (!imagePath) {
+            throw new Error('Image path is required');
+        }
+
+        // Check file exists with retry
+        for (let i = 0; i < 3; i++) {
+            try {
+                await fs.access(imagePath, fs.constants.R_OK);
+                fileExists = true;
+                console.log('File verified as readable on attempt', i + 1);
+                break;
+            } catch (err) {
+                console.log('File not accessible, attempt', i + 1, ':', err.message);
+                if (i < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                }
+            }
+        }
+
+        if (!fileExists) {
+            throw new Error(`File not found or not accessible at path: ${imagePath}`);
+        }
+
+        console.log('Processing image at path:', imagePath);
+
+        // Read file contents
+        const imageBuffer = await fs.readFile(imagePath);
+        
+        // Perform OCR on the buffer
+        const result = await tesseract.recognize(imageBuffer, {
+            lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
+        });
+
+        console.log('OCR Result:', result.data.text);
+
+        // Extract information based on ID type
+        let extractedInfo;
+        switch (idType.toLowerCase()) {
+            case 'aadhar':
+                extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
+                break;
+            default:
+                throw new Error('Unsupported ID type: ' + idType);
+        }
+
+        // Validate extracted info
+        if (!extractedInfo.name && !extractedInfo.idNumber) {
+            throw new Error('Could not extract required information from ID');
+        }
+
+        // Save verification details
+        await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
+
+        return extractedInfo;
+
     } catch (error) {
-      throw new Error(`File not found at path: ${imagePath}`);
+        console.error('Error in verifyID:', error);
+        throw error;
+    } finally {
+        // Clean up the temporary file
+        if (fileExists) {
+            try {
+                await fs.unlink(imagePath);
+                console.log('Temporary file deleted:', imagePath);
+            } catch (err) {
+                console.error('Error deleting temporary file:', err);
+            }
+        }
     }
-
-    console.log('Processing image at path:', imagePath);
-
-    // Perform OCR
-    const result = await tesseract.recognize(imagePath, {
-      lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
-    });
-
-    console.log('OCR Result:', result.data.text);
-
-    // Extract information based on ID type
-    let extractedInfo;
-    switch (idType.toLowerCase()) {
-      case 'aadhar':
-        extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
-        break;
-      // Add other ID types here
-      default:
-        throw new Error('Unsupported ID type: ' + idType);
-    }
-
-    // Validate extracted info
-    if (!extractedInfo.name && !extractedInfo.idNumber) {
-      throw new Error('Could not extract required information from ID');
-    }
-
-    // Save verification details
-    await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
-
-    // Clean up temp file
-    try {
-      await fs.unlink(imagePath);
-      console.log('Temporary file deleted:', imagePath);
-    } catch (err) {
-      console.error('Error deleting temp file:', err);
-    }
-
-    return extractedInfo;
-  } catch (error) {
-    console.error('Error in verifyID:', error);
-    
-    // Clean up temp file in case of error
-    try {
-      await fs.unlink(imagePath);
-    } catch (err) {
-      // Ignore deletion errors
-    }
-    
-    throw error;
-  }
 }
 
 async function saveVerificationDetails(db, bookingId, idType, info, imageUrl) {
