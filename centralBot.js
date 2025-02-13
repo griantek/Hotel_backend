@@ -9,6 +9,11 @@ app.use(bodyParser.json());
 const adminBot = require('./adminBot');
 const customerBot = require('./customerBot');
 
+app.get('/', (req, res) => {
+    res.send('Hello World');
+    console.log('Hello World');
+});
+
 // Webhook verification endpoint
 app.get('/spa', (req, res) => {
     const mode = req.query['hub.mode'];

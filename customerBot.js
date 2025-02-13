@@ -130,6 +130,21 @@ async function handleIncomingMessage(phone, message, name) {
             }
             
             await handleButtonResponse(phone, userName, message.interactive, user);
+        } else if (message.type === 'image') {
+            // Check if we're expecting an ID verification
+            const pendingVerification = await getActiveBooking(phone);
+            
+            if (!pendingVerification || 
+                pendingVerification.verification_status !== 'pending' || 
+                !pendingVerification.selected_id_type) {
+                await sendWhatsAppTextMessage(
+                    phone,
+                    "I received your image but I'm not expecting any images at the moment. If you're trying to verify your ID, please start the check-in process first."
+                );
+                return;
+            }
+
+            await handleIdVerification(phone, message.image, pendingVerification);
         }
     } catch (error) {
         console.error('Error handling message:', error);
@@ -385,6 +400,27 @@ async function handleButtonResponse(phone, name, interactive, user) {
             
         case 'maintenance_menu':
             await sendMaintenanceMenu(phone);
+            break;
+
+        case 'start_checkin':
+            await sendIdTypeSelection(phone);
+            break;
+
+        case 'select_passport':
+        case 'select_aadhar':
+        case 'select_voter':
+        case 'select_license':
+            const idType = buttonId.replace('select_', '');
+            await handleIdTypeSelection(phone, idType);
+            break;
+
+        case 'verify_correct':
+            const verifiedBooking = await getActiveBooking(phone);
+            if (verifiedBooking.paid_status !== 'paid') {
+                await requestPayment(phone, verifiedBooking);
+            } else {
+                await completeCheckin(phone, verifiedBooking);
+            }
             break;
 
         default:
@@ -925,7 +961,7 @@ async function sendServiceOptions(phone, user) {
     }
 }
 
-// Add helper function to check if user is checked in
+// Add this helper function to check if user is checked in
 async function getActiveCheckedInBooking(userId) {
     return new Promise((resolve, reject) => {
         db.get(
@@ -1329,6 +1365,153 @@ schedule.scheduleJob('* * * * *', async function() {
         console.error('Error in service reminder scheduler:', error);
     }
 });
+
+// Add after message handling
+async function getActiveBooking(phone) {
+    return new Promise((resolve, reject) => {
+        db.get(
+            `SELECT b.* FROM bookings b
+             JOIN users u ON b.user_id = u.id
+             WHERE u.phone = ? AND b.status = 'confirmed' AND b.checkin_status = 'pending'`,
+            [phone],
+            (err, row) => {
+                if (err) reject(err);
+                resolve(row);
+            }
+        );
+    });
+}
+
+async function handleIdVerification(phone, image, booking) {
+    try {
+        // Save image URL to database
+        await db.run(
+            'UPDATE bookings SET id_image_url = ?, verification_status = ? WHERE id = ?',
+            [image.url, 'verified', booking.id]
+        );
+
+        // Send verification success message
+        await sendWhatsAppMessage(phone, {
+            interactive: {
+                type: "button",
+                body: {
+                    text: "ID verification successful. Is the information correct?"
+                },
+                action: {
+                    buttons: [
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "verify_correct",
+                                title: "Yes, Correct"
+                            }
+                        },
+                        {
+                            type: "reply",
+                            reply: {
+                                id: "verify_incorrect",
+                                title: "No, Incorrect"
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error handling ID verification:', error);
+        await sendWhatsAppTextMessage(phone, 
+            'Sorry, there was an error verifying your ID. Please try again.'
+        );
+    }
+}
+
+async function sendIdTypeSelection(phone) {
+    await sendWhatsAppMessage(phone, {
+        interactive: {
+            type: "list",
+            header: {
+                type: "text",
+                text: "ID Verification"
+            },
+            body: {
+                text: "Please select the type of ID you'll be using:"
+            },
+            action: {
+                button: "Select ID Type",
+                sections: [{
+                    title: "Available ID Types",
+                    rows: [
+                        {
+                            id: "select_passport",
+                            title: "🛂 Passport"
+                        },
+                        {
+                            id: "select_aadhar",
+                            title: "🆔 Aadhaar Card"
+                        },
+                        {
+                            id: "select_voter",
+                            title: "🗳️ Voter ID"
+                        },
+                        {
+                            id: "select_license",
+                            title: "🚗 Driving License"
+                        }
+                    ]
+                }]
+            }
+        }
+    });
+}
+
+async function handleIdTypeSelection(phone, idType) {
+    const booking = await getActiveBooking(phone);
+    if (!booking) {
+        await sendWhatsAppTextMessage(phone, "No active booking found.");
+        return;
+    }
+
+    await db.run(
+        'UPDATE bookings SET selected_id_type = ?, verification_status = ? WHERE id = ?',
+        [idType, 'pending', booking.id]
+    );
+
+    await sendWhatsAppTextMessage(
+        phone,
+        `Please upload a clear photo of your ${idType}.\n\n` +
+        "Ensure that:\n" +
+        "✅ All text is clearly visible\n" +
+        "✅ The entire ID is in frame\n" +
+        "✅ There's good lighting\n" +
+        "✅ No glare or reflections\n\n" +
+        "⚠️ This request will expire in 5 minutes for security purposes."
+    );
+
+    // Set timeout to clear verification status if not completed
+    setTimeout(async () => {
+        const currentBooking = await getActiveBooking(phone);
+        if (currentBooking?.verification_status === 'pending') {
+            await db.run(
+                'UPDATE bookings SET selected_id_type = NULL, verification_status = "expired" WHERE id = ?',
+                [booking.id]
+            );
+            await sendWhatsAppTextMessage(
+                phone,
+                "ID verification request has expired. Please select ID type again to restart the process."
+            );
+        }
+    }, 5 * 60 * 1000); // 5 minutes timeout
+}
+
+async function requestPayment(phone, booking) {
+    // Implement payment request logic here
+    await sendWhatsAppTextMessage(phone, "Please proceed with the payment to complete your check-in.");
+}
+
+async function completeCheckin(phone, booking) {
+    // Implement check-in completion logic here
+    await sendWhatsAppTextMessage(phone, "Check-in completed successfully. Enjoy your stay!");
+}
 
 // Start server
 module.exports = {

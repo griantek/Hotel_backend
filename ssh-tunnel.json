@@ -1,0 +1,7 @@
+{
+    "name": "ssh-tunnel",
+    "script": "D:\\ssh-tunnel\\run_ssh_tunnel.bat",
+    "interpreter": "none",
+    "autorestart": true,
+    "watch": false
+  }

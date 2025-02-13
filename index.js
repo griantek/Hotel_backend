@@ -169,6 +169,35 @@ db.serialize(() => {
     FOREIGN KEY (service_id) REFERENCES service_schedules(id)
   )`);
 
+  // Add verified_ids table
+  db.run(`CREATE TABLE IF NOT EXISTS verified_ids (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    id_type TEXT NOT NULL,
+    id_number TEXT UNIQUE,
+    name TEXT NOT NULL,
+    dob DATE,
+    verification_status TEXT DEFAULT 'Pending',
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    id_image_path TEXT,
+    FOREIGN KEY (booking_id) REFERENCES bookings (id)
+)`);
+
+// Add new column to bookings table if not exists
+db.run(`PRAGMA foreign_keys = OFF;
+    BEGIN TRANSACTION;
+    
+    CREATE TABLE IF NOT EXISTS temp_bookings AS SELECT *,
+        'pending' as selected_id_type
+    FROM bookings;
+    
+    DROP TABLE bookings;
+    ALTER TABLE temp_bookings RENAME TO bookings;
+    
+    COMMIT;
+    PRAGMA foreign_keys = ON;`
+);
+
   // Insert default services if not exists
   db.get('SELECT COUNT(*) as count FROM hotel_services', [], (err, row) => {
     if (row.count === 0) {
@@ -191,6 +220,7 @@ db.serialize(() => {
     }
   });
 });
+
 
 //Admin
 app.post('/admin/login', async (req, res) => {
