@@ -1382,20 +1382,29 @@ async function getActiveBooking(phone) {
     });
 }
 
+const { verifyID } = require('./handlers/idVerification');
+
+// Update the handleIdVerification function
 async function handleIdVerification(phone, image, booking) {
     try {
-        // Save image URL to database
-        await db.run(
-            'UPDATE bookings SET id_image_url = ?, verification_status = ? WHERE id = ?',
-            [image.url, 'verified', booking.id]
+        // Verify ID
+        const verificationResult = await verifyID(
+            image.url, 
+            booking.selected_id_type, 
+            booking.id,
+            db
         );
 
-        // Send verification success message
+        // Send verification result to user
         await sendWhatsAppMessage(phone, {
             interactive: {
                 type: "button",
                 body: {
-                    text: "ID verification successful. Is the information correct?"
+                    text: `ID Verification Results:\n\n` +
+                          `Name: ${verificationResult.name}\n` +
+                          `ID Number: ${verificationResult.idNumber}\n` +
+                          (verificationResult.dob ? `DOB: ${verificationResult.dob}\n\n` : '\n') +
+                          `Is this information correct?`
                 },
                 action: {
                     buttons: [
@@ -1420,7 +1429,7 @@ async function handleIdVerification(phone, image, booking) {
     } catch (error) {
         console.error('Error handling ID verification:', error);
         await sendWhatsAppTextMessage(phone, 
-            'Sorry, there was an error verifying your ID. Please try again.'
+            'Sorry, there was an error verifying your ID. Please try again or contact our support.'
         );
     }
 }
@@ -1484,15 +1493,6 @@ async function handleIdTypeSelection(phone, idType) {
         "✅ The entire ID is in frame\n" +
         "✅ There's good lighting\n" +
         "✅ No glare or reflections\n\n" +
-        "⚠️ This request will expire in 5 minutes for security purposes."
-    );
-
-    // Set timeout to clear verification status if not completed
-    setTimeout(async () => {
-        const currentBooking = await getActiveBooking(phone);
-        if (currentBooking?.verification_status === 'pending') {
-            await db.run(
-                'UPDATE bookings SET selected_id_type = NULL, verification_status = "expired" WHERE id = ?',
                 [booking.id]
             );
             await sendWhatsAppTextMessage(
