@@ -1523,6 +1523,10 @@ async function getMediaUrl(mediaId) {
         await fs.writeFile(tempFilePath, mediaResponse.data);
         console.log('Media file saved to:', tempFilePath);
 
+        // Add a 5-second delay after saving
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('Waited 5 seconds after saving file');
+
         // Verify file exists and is readable
         await fs.access(tempFilePath, fs.constants.R_OK);
         console.log('File verified as readable:', tempFilePath);
@@ -1687,6 +1691,10 @@ async function getMediaUrl(mediaId) {
         // Save file
         await fs.writeFile(tempFilePath, mediaResponse.data);
         console.log('Media file saved to:', tempFilePath);
+
+        // Add a 5-second delay after saving
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('Waited 5 seconds after saving file');
 
         // Verify file exists and is readable
         await fs.access(tempFilePath, fs.constants.R_OK);
