@@ -18,10 +18,10 @@ class AadhaarVerifier {
     const aadhaarPattern = /[2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4}/;
     
     // Name pattern: typically in all caps after "To" or starts with "श्री"/"श्रीमती" for Hindi
-    const namePattern = /(?:To[\s:]+([A-Z\s]+))|(?:श्री(?:मती)?\s+([A-Z\s]+))/;
+    const namePattern = /([A-Z][A-Za-z\s]+)/;
     
     // DOB pattern: DD/MM/YYYY or YYYY
-    const dobPattern = /(?:DOB|Year of Birth|जन्म)[\s:]+([0-9]{2}\/[0-9]{2}\/[0-9]{4}|[0-9]{4})/i;
+    const dobPattern = /(?:DOB|Year of Birth)[\s:]+([0-9]{2}\/[0-9]{2}\/[0-9]{4}|[0-9]{4})/i;
 
     for (const line of lines) {
       // Extract Aadhaar number
@@ -53,19 +53,16 @@ class AadhaarVerifier {
   }
 }
 
-async function verifyID(imageUrl, idType, bookingId, db) {
+async function verifyID(imagePath, idType, bookingId, db) {
   try {
-    // Download image
-    const response = await axios({
-      url: imageUrl,
-      responseType: 'arraybuffer'
-    });
+    if (!imagePath) {
+      throw new Error('Image path is required');
+    }
 
-    // Convert to Buffer
-    const buffer = Buffer.from(response.data, 'binary');
+    console.log('Processing image:', imagePath);
 
-    // Perform OCR
-    const result = await tesseract.recognize(buffer, {
+    // Perform OCR directly on the file
+    const result = await tesseract.recognize(imagePath, {
       lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
     });
 
@@ -77,52 +74,78 @@ async function verifyID(imageUrl, idType, bookingId, db) {
       case 'aadhar':
         extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
         break;
-      // Add other ID types here
       default:
         throw new Error('Unsupported ID type');
     }
 
-    // Save verification details
-    await new Promise((resolve, reject) => {
-      db.run(
-        `INSERT INTO verified_ids (
-          booking_id, id_type, id_number, name, dob, 
-          verification_status, ocr_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          bookingId,
-          idType,
-          extractedInfo.idNumber,
-          extractedInfo.name,
-          extractedInfo.dob,
-          'verified',
-          result.data.text
-        ],
-        err => {
-          if (err) reject(err);
-          resolve();
-        }
-      );
-    });
+    // Validate extracted info
+    if (!extractedInfo.name && !extractedInfo.idNumber) {
+      throw new Error('Could not extract required information from ID');
+    }
 
-    // Update booking
-    await new Promise((resolve, reject) => {
-      db.run(
-        'UPDATE bookings SET id_image_url = ?, verification_status = ? WHERE id = ?',
-        [imageUrl, 'verified', bookingId],
-        err => {
-          if (err) reject(err);
-          resolve();
-        }
-      );
-    });
+    // Save verification details
+    await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
+
+    // Clean up temporary file
+    try {
+      await fs.promises.unlink(imagePath);
+    } catch (err) {
+      console.error('Error deleting temp file:', err);
+    }
 
     return extractedInfo;
 
   } catch (error) {
     console.error('Error verifying ID:', error);
+    // Clean up temporary file in case of error
+    try {
+      await fs.promises.unlink(imagePath);
+    } catch (err) {
+      console.error('Error deleting temp file:', err);
+    }
     throw error;
   }
+}
+
+async function saveVerificationDetails(db, bookingId, idType, info, imageUrl) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+
+      try {
+        // Insert verification details
+        db.run(
+          `INSERT INTO verified_ids (
+            booking_id, id_type, id_number, name, dob, 
+            verification_status, ocr_text
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            bookingId,
+            idType,
+            info.idNumber,
+            info.name,
+            info.dob,
+            'verified',
+            info.ocrText
+          ]
+        );
+
+        // Update booking
+        db.run(
+          'UPDATE bookings SET id_image_url = ?, verification_status = ? WHERE id = ?',
+          [imageUrl, 'verified', bookingId]
+        );
+
+        db.run('COMMIT', err => {
+          if (err) reject(err);
+          else resolve();
+        });
+      } catch (err) {
+        db.run('ROLLBACK');
+        reject(err);
+      }
+    });
+  });
 }
 
 module.exports = { verifyID };

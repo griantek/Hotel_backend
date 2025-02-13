@@ -131,20 +131,43 @@ async function handleIncomingMessage(phone, message, name) {
             
             await handleButtonResponse(phone, userName, message.interactive, user);
         } else if (message.type === 'image') {
-            // Check if we're expecting an ID verification
-            const pendingVerification = await getActiveBooking(phone);
+            try {
+                // Check if we're expecting an ID verification
+                const pendingVerification = await getActiveBooking(phone);
+                
+                if (!pendingVerification || 
+                    pendingVerification.verification_status !== 'pending' || 
+                    !pendingVerification.selected_id_type) {
+                    await sendWhatsAppTextMessage(
+                        phone,
+                        "I received your image but I'm not expecting any images at the moment. If you're trying to verify your ID, please start the check-in process first."
+                    );
+                    return;
+                }
             
-            if (!pendingVerification || 
-                pendingVerification.verification_status !== 'pending' || 
-                !pendingVerification.selected_id_type) {
+                // Log the entire message object to see what we receive
+                console.log('Received image message:', JSON.stringify(message, null, 2));
+            
+                // Get permanent media URL
+                if (!message.image || !message.image.id) {
+                    throw new Error('No image ID received');
+                }
+            
+                const mediaUrl = await getMediaUrl(message.image.id);
+                console.log('Retrieved media URL:', mediaUrl);
+            
+                if (!mediaUrl) {
+                    throw new Error('Failed to get media URL');
+                }
+            
+                await handleIdVerification(phone, { url: mediaUrl }, pendingVerification);
+            } catch (error) {
+                console.error('Error processing image:', error);
                 await sendWhatsAppTextMessage(
                     phone,
-                    "I received your image but I'm not expecting any images at the moment. If you're trying to verify your ID, please start the check-in process first."
+                    "Sorry, there was an error processing your ID image. Please try again."
                 );
-                return;
             }
-
-            await handleIdVerification(phone, message.image, pendingVerification);
         }
     } catch (error) {
         console.error('Error handling message:', error);
@@ -1532,6 +1555,39 @@ async function requestPayment(phone, booking) {
 async function completeCheckin(phone, booking) {
     // Implement check-in completion logic here
     await sendWhatsAppTextMessage(phone, "Check-in completed successfully. Enjoy your stay!");
+}
+
+// Add this new helper function to get permanent media URL
+async function getMediaUrl(mediaId) {
+    try {
+        // First get the media URL
+        const response = await axios.get(
+            `https://graph.facebook.com/v17.0/${mediaId}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+                }
+            }
+        );
+        console.log('Media info response:', response.data);
+
+        // Now download the actual media
+        const mediaResponse = await axios.get(response.data.url, {
+            headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+            },
+            responseType: 'arraybuffer'
+        });
+
+        // Save to temporary file
+        const tempFilePath = path.join(__dirname, 'uploads', 'temp', `${Date.now()}.jpg`);
+        await fs.promises.writeFile(tempFilePath, mediaResponse.data);
+
+        return tempFilePath;
+    } catch (error) {
+        console.error('Error getting media URL:', error.response?.data || error);
+        return null;
+    }
 }
 
 // Start server
