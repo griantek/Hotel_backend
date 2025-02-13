@@ -69,6 +69,41 @@ async function sendWhatsAppMessage(phoneNumber, message) {
   }
 }
 
+// Add this function near other WhatsApp message functions
+async function sendBookingConfirmation(phone, bookingData) {
+    const {
+        bookingId,
+        roomType,
+        checkInDate,
+        checkInTime,
+        checkOutDate,
+        checkOutTime,
+        guestCount,
+        totalPrice,
+        numberOfDays
+    } = bookingData;
+
+    const message = 
+        `🎉 Thank you for choosing us! 🎉\n\n` +
+        `🌟 Booking Confirmation 🌟\n` +
+        `Here are the details of your reservation:\n\n` +
+        `🏨 Room Type: ${roomType}\n` +
+        `🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n` +
+        `🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n` +
+        `👥 Guests: ${guestCount}\n` +
+        `💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n` +
+        `📌 Booking ID: ${bookingId}\n\n` +
+        `📝 Check-in Instructions:\n` +
+        `1. Arrive at your check-in time\n` +
+        `2. Type "start_checkin" in this chat when you arrive\n` +
+        `3. Select and upload a valid photo ID\n` +
+        `4. Complete payment if pending\n` +
+        `5. Collect your room key from reception\n\n` +
+        `We're excited to host you! If you need any assistance, feel free to reach out. 😊`;
+
+    await sendWhatsAppMessage(phone, message);
+}
+
 // Database tables remain the same
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
@@ -169,35 +204,6 @@ db.serialize(() => {
     FOREIGN KEY (service_id) REFERENCES service_schedules(id)
   )`);
 
-  // Add verified_ids table
-  db.run(`CREATE TABLE IF NOT EXISTS verified_ids (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    booking_id INTEGER NOT NULL,
-    id_type TEXT NOT NULL,
-    id_number TEXT UNIQUE,
-    name TEXT NOT NULL,
-    dob DATE,
-    verification_status TEXT DEFAULT 'Pending',
-    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    id_image_path TEXT,
-    FOREIGN KEY (booking_id) REFERENCES bookings (id)
-)`);
-
-// Add new column to bookings table if not exists
-db.run(`PRAGMA foreign_keys = OFF;
-    BEGIN TRANSACTION;
-    
-    CREATE TABLE IF NOT EXISTS temp_bookings AS SELECT *,
-        'pending' as selected_id_type
-    FROM bookings;
-    
-    DROP TABLE bookings;
-    ALTER TABLE temp_bookings RENAME TO bookings;
-    
-    COMMIT;
-    PRAGMA foreign_keys = ON;`
-);
-
   // Insert default services if not exists
   db.get('SELECT COUNT(*) as count FROM hotel_services', [], (err, row) => {
     if (row.count === 0) {
@@ -220,7 +226,6 @@ db.run(`PRAGMA foreign_keys = OFF;
     }
   });
 });
-
 
 //Admin
 app.post('/admin/login', async (req, res) => {
@@ -574,26 +579,14 @@ function authenticateAdmin(req, res, next) {
 
 // create booking endpoint with date-based pricing
 app.post('/api/bookings', async (req, res) => {
-  const { 
-    name, 
-    phone, 
-    roomType, 
-    checkInDate, 
-    checkInTime, 
-    checkOutDate, 
-    checkOutTime, 
-    guestCount,
-    notes 
-  } = req.body;
+  const { name, phone, roomType, checkInDate, checkInTime, checkOutDate, checkOutTime, guestCount, notes } = req.body;
 
   db.serialize(async () => {
     try {
-      // Calculate number of days based on dates only, ignoring time
       const checkIn = moment(checkInDate);
       const checkOut = moment(checkOutDate);
-      const numberOfDays = checkOut.diff(checkIn, 'days') ; // Including both check-in and check-out days
+      const numberOfDays = checkOut.diff(checkIn, 'days');
 
-      // Get room price per day
       db.get('SELECT price FROM rooms WHERE type = ?', [roomType], (err, room) => {
         if (err || !room) {
           return res.status(500).json({ error: 'Room type not found or database error' });
@@ -614,14 +607,15 @@ app.post('/api/bookings', async (req, res) => {
                 return res.status(500).json({ error: err.message });
               }
               userId = this.lastID;
-              insertBooking(userId, totalPrice);
+              insertBooking(userId);
             });
           } else {
             userId = user.id;
-            insertBooking(userId, totalPrice);
+            insertBooking(userId);
           }
 
-          function insertBooking(userId, totalPrice) {
+          // Move insertBooking function inside the scope where it's used
+          function insertBooking(userId) {
             db.run(
               `INSERT INTO bookings (
                 user_id, room_type, check_in_date, check_in_time, 
@@ -634,14 +628,24 @@ app.post('/api/bookings', async (req, res) => {
                 }
 
                 const bookingId = this.lastID;
-                // Create reminders
                 createReminders(bookingId, checkInDate, checkInTime);
-                const confirmationMessage = `🎉 Thank you for choosing us! 🎉\n\n🌟 Booking Confirmation 🌟\nHere are the details of your reservation:\n\n🏨 Room Type: ${roomType}\n🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n👥 Guests: ${guestCount}\n💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n\n📌 Booking ID: ${this.lastID}\n\nWe’re excited to host you and ensure your stay is comfortable and memorable! If you have any questions or special requests, feel free to reach out.\nLooking forward to welcoming you! 😊`;
-                await sendWhatsAppMessage(phone, confirmationMessage);
+                
+                // Send confirmation message
+                await sendBookingConfirmation(phone, {
+                  bookingId,
+                  roomType,
+                  checkInDate,
+                  checkInTime,
+                  checkOutDate,
+                  checkOutTime,
+                  guestCount,
+                  totalPrice,
+                  numberOfDays
+                });
 
                 res.json({
                   message: 'Booking created successfully',
-                  bookingId: this.lastID,
+                  bookingId: bookingId,
                   totalPrice: totalPrice,
                   numberOfDays: numberOfDays
                 });
