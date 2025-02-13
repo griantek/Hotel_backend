@@ -170,6 +170,7 @@ db.serialize(() => {
     total_price REAL NOT NULL,
     paid_status TEXT DEFAULT 'unpaid',
     verification_status TEXT DEFAULT 'pending',
+    selected_id_type TEXT,
     room_number TEXT,
     notification_sent BOOLEAN DEFAULT 0,
     checkout_reminder_sent BOOLEAN DEFAULT 0,
