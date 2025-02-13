@@ -1561,8 +1561,20 @@ async function completeCheckin(phone, booking) {
 // Add this new helper function to get permanent media URL
 async function getMediaUrl(mediaId) {
     try {
+        console.log('Getting media URL for ID:', mediaId);
+        
+        // Create uploads directory if it doesn't exist
+        const uploadDir = path.join(__dirname, 'uploads', 'temp');
+        try {
+            await fs.mkdir(uploadDir, { recursive: true });
+            console.log('Upload directory created/verified:', uploadDir);
+        } catch (err) {
+            console.error('Error creating directory:', err);
+            throw new Error('Failed to create upload directory');
+        }
+
         // First get the media URL
-        const response = await axios.get(
+        const mediaInfoResponse = await axios.get(
             `https://graph.facebook.com/v17.0/${mediaId}`,
             {
                 headers: {
@@ -1570,23 +1582,42 @@ async function getMediaUrl(mediaId) {
                 }
             }
         );
-        console.log('Media info response:', response.data);
+        
+        console.log('Media info response:', mediaInfoResponse.data);
+        
+        if (!mediaInfoResponse.data || !mediaInfoResponse.data.url) {
+            throw new Error('No media URL found in response');
+        }
 
-        // Now download the actual media
-        const mediaResponse = await axios.get(response.data.url, {
+        // Download media file
+        const mediaResponse = await axios.get(mediaInfoResponse.data.url, {
             headers: {
                 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`
             },
-            responseType: 'arraybuffer'
+            responseType: 'arraybuffer',
+            timeout: 5000 // 5 second timeout
         });
 
-        // Save to temporary file
-        const tempFilePath = path.join(__dirname, 'uploads', 'temp', `${Date.now()}.jpg`);
-        await fs.promises.writeFile(tempFilePath, mediaResponse.data);
+        // Save to temporary file with timestamp and random string
+        const timestamp = Date.now();
+        const randomString = Math.random().toString(36).substring(7);
+        const tempFilePath = path.join(uploadDir, `${timestamp}-${randomString}.jpg`);
+        
+        try {
+            await fs.writeFile(tempFilePath, mediaResponse.data);
+            console.log('Media file saved to:', tempFilePath);
+            return tempFilePath;
+        } catch (writeError) {
+            console.error('Error writing file:', writeError);
+            throw new Error('Failed to save media file');
+        }
 
-        return tempFilePath;
     } catch (error) {
-        console.error('Error getting media URL:', error.response?.data || error);
+        console.error('Error getting media URL:', error);
+        if (error.response) {
+            console.error('Response data:', error.response.data);
+            console.error('Response status:', error.response.status);
+        }
         return null;
     }
 }
