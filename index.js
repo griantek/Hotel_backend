@@ -83,23 +83,47 @@ async function sendBookingConfirmation(phone, bookingData) {
         numberOfDays
     } = bookingData;
 
-    const message = 
-        `🎉 Thank you for choosing us! 🎉\n\n` +
-        `🌟 Booking Confirmation 🌟\n` +
-        `Here are the details of your reservation:\n\n` +
-        `🏨 Room Type: ${roomType}\n` +
-        `🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n` +
-        `🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n` +
-        `👥 Guests: ${guestCount}\n` +
-        `💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n` +
-        `📌 Booking ID: ${bookingId}\n\n` +
-        `📝 Check-in Instructions:\n` +
-        `1. Arrive at your check-in time\n` +
-        `2. Type "start_checkin" in this chat when you arrive\n` +
-        `3. Select and upload a valid photo ID\n` +
-        `4. Complete payment if pending\n` +
-        `5. Collect your room key from reception\n\n` +
-        `We're excited to host you! If you need any assistance, feel free to reach out. 😊`;
+    const message = {
+        interactive: {
+            type: "button",
+            body: {
+                text: `🎉 Thank you for choosing us! 🎉\n\n` +
+                    `🌟 Booking Confirmation 🌟\n` +
+                    `Here are the details of your reservation:\n\n` +
+                    `🏨 Room Type: ${roomType}\n` +
+                    `🗓️ Check-in: ${checkInDate} at ${formatTimeTo12Hour(checkInTime)}\n` +
+                    `🗓️ Check-out: ${checkOutDate} at ${formatTimeTo12Hour(checkOutTime)}\n` +
+                    `👥 Guests: ${guestCount}\n` +
+                    `💵 Total Price: $${totalPrice.toFixed(2)} (${numberOfDays} day${numberOfDays > 1 ? 's' : ''})\n` +
+                    `📌 Booking ID: ${bookingId}\n\n` +
+                    `📝 Check-in Instructions:\n` +
+                    `1. Arrive at your check-in time\n` +
+                    `2. Click the button below when you arrive\n` +
+                    `3. Select and upload a valid photo ID\n` +
+                    `4. Complete payment if pending\n` +
+                    `5. Collect your room key from reception\n\n` +
+                    `We're excited to host you! If you need any assistance, feel free to reach out. 😊`
+            },
+            action: {
+                buttons: [
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "start_checkin",
+                            title: "Start Check-in"
+                        }
+                    },
+                    {
+                        type: "reply",
+                        reply: {
+                            id: "view_booking",
+                            title: "View Booking"
+                        }
+                    }
+                ]
+            }
+        }
+    };
 
     await sendWhatsAppMessage(phone, message);
 }
