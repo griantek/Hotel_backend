@@ -51,21 +51,42 @@ function formatTimeTo12Hour(time) {
   return `${formattedHour}:${minute} ${ampm}`;
 }
 
-async function sendWhatsAppMessage(phoneNumber, message) {
+// Replace the existing sendWhatsAppMessage function
+async function sendWhatsAppMessage(phoneNumber, messageData) {
   try {
-    await axios.post(WHATSAPP_API_URL, {
-      messaging_product: "whatsapp",
-      to: phoneNumber,
-      type: "text",
-      text: { body: message }
-    }, {
-      headers: {
-        'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // Check if messageData is an interactive message object
+    if (messageData.interactive) {
+      // Send as interactive message
+      await axios.post(WHATSAPP_API_URL, {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "interactive",
+        interactive: messageData.interactive
+      }, {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } else {
+      // Send as simple text message
+      await axios.post(WHATSAPP_API_URL, {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "text",
+        text: {
+          body: typeof messageData === 'string' ? messageData : messageData.text
+        }
+      }, {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
   } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
+    console.error('Error sending WhatsApp message:', error.response?.data || error);
+    throw error;
   }
 }
 
