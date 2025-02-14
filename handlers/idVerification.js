@@ -33,14 +33,9 @@ async function verifyID(imagePath, idType, bookingId, db) {
 
     console.log('Processing image at path:', imagePath);
 
-    // Initialize Tesseract worker properly
-    const worker = await createWorker();
+    const worker = await createWorker("eng")
 
     try {
-      // Load and initialize with just English
-      await worker.load();
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
 
       // Perform OCR
       console.log('Starting OCR recognition...');
