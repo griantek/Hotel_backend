@@ -1436,8 +1436,8 @@ async function handleIdVerification(phone, image, booking) {
                 type: "button",
                 body: {
                     text: `ID Verification Results:\n\n` +
-                          `Name: ${verificationResult.name}\n` +
-                          `ID Number: ${verificationResult.idNumber}\n` +
+                          `Name: ${verificationResult.aadhaarInfo.Name}\n` +
+                          `ID Number: ${verificationResult.aadhaarInfo.IDNumber}\n` +
                           (verificationResult.dob ? `DOB: ${verificationResult.dob}\n\n` : '\n') +
                           `Is this information correct?`
                 },
