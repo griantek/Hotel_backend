@@ -1,6 +1,5 @@
-const tesseract = require('tesseract.js');
+const { PaddleOCR } = require('node-paddle-ocr');
 const path = require('path');
-const axios = require('axios');
 const fsPromises = require('fs').promises;
 
 class AadhaarVerifier {
@@ -55,7 +54,6 @@ class AadhaarVerifier {
 
 async function verifyID(imagePath, idType, bookingId, db) {
   let fileExists = false;
-  let worker = null;
   try {
     console.log('Starting ID verification for:', { imagePath, idType, bookingId });
     
@@ -63,7 +61,7 @@ async function verifyID(imagePath, idType, bookingId, db) {
       throw new Error('Image path is required');
     }
 
-    // Check file exists with retry using promises
+    // File existence checks
     for (let i = 0; i < 3; i++) {
       try {
         await fsPromises.access(imagePath, fsPromises.constants.R_OK);
@@ -85,33 +83,27 @@ async function verifyID(imagePath, idType, bookingId, db) {
 
     console.log('Processing image at path:', imagePath);
 
-    // Read file contents
-    const imageBuffer = await fsPromises.readFile(imagePath);
-    
-    // Initialize Tesseract worker with simpler configuration
-    worker = await tesseract.createWorker();
-    console.log('Tesseract worker created');
-
-    // Set language based on ID type
-    const lang = idType === 'aadhar' ? 'eng+hin' : 'eng';
-    console.log('Using language:', lang);
+    // Initialize PaddleOCR
+    const ocr = new PaddleOCR({
+      modelPath: path.join(__dirname, '../models'), // Models will be downloaded here
+      lang: 'en', // Use Hindi for Aadhar, English for others
+      debug: false
+    });
 
     try {
-      // Initialize worker with language
-      await worker.load();
-      await worker.loadLanguage(lang);
-      await worker.initialize(lang);
-
       // Perform OCR
       console.log('Starting OCR recognition...');
-      const result = await worker.recognize(imageBuffer);
-      console.log('OCR Result:', result.data.text);
+      const result = await ocr.recognize(imagePath);
+      
+      // Combine all text from detected regions
+      const fullText = result.map(block => block.text).join('\n');
+      console.log('OCR Result:', fullText);
 
       // Extract information based on ID type
       let extractedInfo;
       switch (idType.toLowerCase()) {
         case 'aadhar':
-          extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
+          extractedInfo = await AadhaarVerifier.extractInfo(fullText);
           break;
         default:
           throw new Error('Unsupported ID type: ' + idType);
@@ -127,12 +119,9 @@ async function verifyID(imagePath, idType, bookingId, db) {
 
       return extractedInfo;
 
-    } finally {
-      // Terminate worker in finally block
-      if (worker) {
-        await worker.terminate();
-        console.log('Tesseract worker terminated');
-      }
+    } catch (error) {
+      console.error('Error in OCR processing:', error);
+      throw error;
     }
   } catch (error) {
     console.error('Error in verifyID:', error);
@@ -162,6 +151,7 @@ async function saveVerificationDetails(db, bookingId, idType, info, imageUrl) {
             booking_id, id_type, id_number, name, dob, 
             verification_status, ocr_text
           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
           [
             bookingId,
             idType,
