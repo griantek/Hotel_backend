@@ -88,24 +88,19 @@ async function verifyID(imagePath, idType, bookingId, db) {
     // Read file contents
     const imageBuffer = await fsPromises.readFile(imagePath);
     
-    // Initialize Tesseract worker with proper configuration
-    worker = await tesseract.createWorker({
-      logger: progress => {
-        if (progress.status === 'recognizing text') {
-          console.log('OCR Progress:', Math.floor(progress.progress * 100), '%');
-        }
-      }
-    });
+    // Initialize Tesseract worker with simpler configuration
+    worker = await tesseract.createWorker();
+    console.log('Tesseract worker created');
 
     // Set language based on ID type
-    const langs = idType === 'aadhar' ? ['eng', 'hin'] : ['eng'];
-    console.log('Using languages:', langs);
+    const lang = idType === 'aadhar' ? 'eng+hin' : 'eng';
+    console.log('Using language:', lang);
 
     try {
       // Initialize worker with language
       await worker.load();
-      await worker.loadLanguage(langs.join('+'));
-      await worker.initialize(langs.join('+'));
+      await worker.loadLanguage(lang);
+      await worker.initialize(lang);
 
       // Perform OCR
       console.log('Starting OCR recognition...');
