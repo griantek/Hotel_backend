@@ -87,33 +87,39 @@ async function verifyID(imagePath, idType, bookingId, db) {
     // Read file contents
     const imageBuffer = await fsPromises.readFile(imagePath);
     
-    // Perform OCR
-    const result = await tesseract.recognize(imageBuffer, {
-      lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
-    });
+    // Create worker and load language data
+    const worker = await tesseract.createWorker();
+    try {
+      await worker.loadLanguage(idType === 'aadhar' ? 'eng+hin' : 'eng');
+      await worker.initialize(idType === 'aadhar' ? 'eng+hin' : 'eng');
+      
+      // Perform OCR
+      const result = await worker.recognize(imageBuffer);
+      console.log('OCR Result:', result.data.text);
 
-    console.log('OCR Result:', result.data.text);
+      // Extract information based on ID type
+      let extractedInfo;
+      switch (idType.toLowerCase()) {
+        case 'aadhar':
+          extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
+          break;
+        default:
+          throw new Error('Unsupported ID type: ' + idType);
+      }
 
-    // Extract information based on ID type
-    let extractedInfo;
-    switch (idType.toLowerCase()) {
-      case 'aadhar':
-        extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
-        break;
-      // Add other ID types here
-      default:
-        throw new Error('Unsupported ID type: ' + idType);
+      // Validate extracted info
+      if (!extractedInfo.name && !extractedInfo.idNumber) {
+        throw new Error('Could not extract required information from ID');
+      }
+
+      // Save verification details
+      await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
+
+      return extractedInfo;
+    } finally {
+      // Terminate worker
+      await worker.terminate();
     }
-
-    // Validate extracted info
-    if (!extractedInfo.name && !extractedInfo.idNumber) {
-      throw new Error('Could not extract required information from ID');
-    }
-
-    // Save verification details
-    await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
-
-    return extractedInfo;
   } catch (error) {
     console.error('Error in verifyID:', error);
     throw error;
