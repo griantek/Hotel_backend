@@ -55,6 +55,7 @@ class AadhaarVerifier {
 
 async function verifyID(imagePath, idType, bookingId, db) {
   let fileExists = false;
+  let worker = null;
   try {
     console.log('Starting ID verification for:', { imagePath, idType, bookingId });
     
@@ -73,7 +74,7 @@ async function verifyID(imagePath, idType, bookingId, db) {
       } catch (err) {
         console.log('File not accessible, attempt', i + 1, ':', err.message);
         if (i < 2) {
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
     }
@@ -87,13 +88,27 @@ async function verifyID(imagePath, idType, bookingId, db) {
     // Read file contents
     const imageBuffer = await fsPromises.readFile(imagePath);
     
-    // Create worker and load language data
-    const worker = await tesseract.createWorker();
+    // Initialize Tesseract worker with proper configuration
+    worker = await tesseract.createWorker({
+      logger: progress => {
+        if (progress.status === 'recognizing text') {
+          console.log('OCR Progress:', Math.floor(progress.progress * 100), '%');
+        }
+      }
+    });
+
+    // Set language based on ID type
+    const langs = idType === 'aadhar' ? ['eng', 'hin'] : ['eng'];
+    console.log('Using languages:', langs);
+
     try {
-      await worker.loadLanguage(idType === 'aadhar' ? 'eng+hin' : 'eng');
-      await worker.initialize(idType === 'aadhar' ? 'eng+hin' : 'eng');
-      
+      // Initialize worker with language
+      await worker.load();
+      await worker.loadLanguage(langs.join('+'));
+      await worker.initialize(langs.join('+'));
+
       // Perform OCR
+      console.log('Starting OCR recognition...');
       const result = await worker.recognize(imageBuffer);
       console.log('OCR Result:', result.data.text);
 
@@ -116,9 +131,13 @@ async function verifyID(imagePath, idType, bookingId, db) {
       await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
 
       return extractedInfo;
+
     } finally {
-      // Terminate worker
-      await worker.terminate();
+      // Terminate worker in finally block
+      if (worker) {
+        await worker.terminate();
+        console.log('Tesseract worker terminated');
+      }
     }
   } catch (error) {
     console.error('Error in verifyID:', error);
