@@ -1,4 +1,4 @@
-const tesseract = require('tesseract.js');
+const { createWorker } = require('tesseract.js');
 const path = require('path');
 const fsPromises = require('fs').promises;
 
@@ -33,31 +33,29 @@ async function verifyID(imagePath, idType, bookingId, db) {
 
     console.log('Processing image at path:', imagePath);
 
-    // Read file contents
-    const imageBuffer = await fsPromises.readFile(imagePath);
-    
-    // Initialize Tesseract worker
-    const worker = await tesseract.createWorker();
+    // Initialize Tesseract worker properly
+    const worker = await createWorker();
 
     try {
-      // Initialize worker with English only
+      // Load and initialize with just English
+      await worker.load();
       await worker.loadLanguage('eng');
       await worker.initialize('eng');
 
       // Perform OCR
       console.log('Starting OCR recognition...');
-      const result = await worker.recognize(imageBuffer);
+      const { data: { text } } = await worker.recognize(imagePath);
       
-      // Just log the extracted text for now
-      console.log('Extracted Text:', result.data.text);
+      // Log and return the extracted text
+      console.log('Extracted Text:', text);
 
       return {
         success: true,
-        text: result.data.text
+        text: text
       };
 
     } finally {
-      // Always terminate worker
+      // Terminate worker
       await worker.terminate();
       console.log('Tesseract worker terminated');
     }
