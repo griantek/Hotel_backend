@@ -1,7 +1,7 @@
 const tesseract = require('tesseract.js');
 const path = require('path');
 const axios = require('axios');
-const fs = require('fs');
+const fsPromises = require('fs').promises;
 
 class AadhaarVerifier {
   static async extractInfo(ocrText) {
@@ -54,79 +54,80 @@ class AadhaarVerifier {
 }
 
 async function verifyID(imagePath, idType, bookingId, db) {
-    let fileExists = false;
-    try {
-        console.log('Starting ID verification for:', { imagePath, idType, bookingId });
-        
-        if (!imagePath) {
-            throw new Error('Image path is required');
-        }
-
-        // Check file exists with retry
-        for (let i = 0; i < 3; i++) {
-            try {
-                await fs.access(imagePath, fs.constants.R_OK);
-                fileExists = true;
-                console.log('File verified as readable on attempt', i + 1);
-                break;
-            } catch (err) {
-                console.log('File not accessible, attempt', i + 1, ':', err.message);
-                if (i < 2) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-                }
-            }
-        }
-
-        if (!fileExists) {
-            throw new Error(`File not found or not accessible at path: ${imagePath}`);
-        }
-
-        console.log('Processing image at path:', imagePath);
-
-        // Read file contents
-        const imageBuffer = await fs.readFile(imagePath);
-        
-        // Perform OCR on the buffer
-        const result = await tesseract.recognize(imageBuffer, {
-            lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
-        });
-
-        console.log('OCR Result:', result.data.text);
-
-        // Extract information based on ID type
-        let extractedInfo;
-        switch (idType.toLowerCase()) {
-            case 'aadhar':
-                extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
-                break;
-            default:
-                throw new Error('Unsupported ID type: ' + idType);
-        }
-
-        // Validate extracted info
-        if (!extractedInfo.name && !extractedInfo.idNumber) {
-            throw new Error('Could not extract required information from ID');
-        }
-
-        // Save verification details
-        await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
-
-        return extractedInfo;
-
-    } catch (error) {
-        console.error('Error in verifyID:', error);
-        throw error;
-    } finally {
-        // Clean up the temporary file
-        if (fileExists) {
-            try {
-                await fs.unlink(imagePath);
-                console.log('Temporary file deleted:', imagePath);
-            } catch (err) {
-                console.error('Error deleting temporary file:', err);
-            }
-        }
+  let fileExists = false;
+  try {
+    console.log('Starting ID verification for:', { imagePath, idType, bookingId });
+    
+    if (!imagePath) {
+      throw new Error('Image path is required');
     }
+
+    // Check file exists with retry using promises
+    for (let i = 0; i < 3; i++) {
+      try {
+        await fsPromises.access(imagePath, fsPromises.constants.R_OK);
+        const stats = await fsPromises.stat(imagePath);
+        console.log('File verified as readable on attempt', i + 1, 'Size:', stats.size);
+        fileExists = true;
+        break;
+      } catch (err) {
+        console.log('File not accessible, attempt', i + 1, ':', err.message);
+        if (i < 2) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        }
+      }
+    }
+
+    if (!fileExists) {
+      throw new Error(`File not found or not accessible at path: ${imagePath}`);
+    }
+
+    console.log('Processing image at path:', imagePath);
+
+    // Read file contents
+    const imageBuffer = await fsPromises.readFile(imagePath);
+    
+    // Perform OCR
+    const result = await tesseract.recognize(imageBuffer, {
+      lang: idType === 'aadhar' ? 'eng+hin' : 'eng'
+    });
+
+    console.log('OCR Result:', result.data.text);
+
+    // Extract information based on ID type
+    let extractedInfo;
+    switch (idType.toLowerCase()) {
+      case 'aadhar':
+        extractedInfo = await AadhaarVerifier.extractInfo(result.data.text);
+        break;
+      // Add other ID types here
+      default:
+        throw new Error('Unsupported ID type: ' + idType);
+    }
+
+    // Validate extracted info
+    if (!extractedInfo.name && !extractedInfo.idNumber) {
+      throw new Error('Could not extract required information from ID');
+    }
+
+    // Save verification details
+    await saveVerificationDetails(db, bookingId, idType, extractedInfo, imagePath);
+
+    return extractedInfo;
+  } catch (error) {
+    console.error('Error in verifyID:', error);
+    throw error;
+  } finally {
+    // Clean up temp file
+    if (fileExists) {
+      try {
+        await fsPromises.unlink(imagePath);
+        console.log('Temporary file deleted:', imagePath);
+      } catch (err) {
+        console.error('Error deleting temp file:', err);
+      }
+    }
+  }
 }
 
 async function saveVerificationDetails(db, bookingId, idType, info, imageUrl) {
